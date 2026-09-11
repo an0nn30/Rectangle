@@ -29,6 +29,10 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
 
     private let backdropLayer = CALayer()
     private var ghostLayers: [CGWindowID: CALayer] = [:]
+    /// Scale the captures are drawn at. The overlay spans every screen the move touches, so a ghost can
+    /// cross from a Retina display onto a non-Retina one: the highest scale in use keeps it sharp there
+    /// and merely downsamples elsewhere.
+    private var captureScale: CGFloat = 1
     /// Bumped whenever the overlay's content is replaced or hidden, so stale animation callbacks are ignored.
     private var generation = 0
 
@@ -68,11 +72,12 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         clearGhosts()
         setFrame(overlayFrame, display: false)
         resetAlpha()
+        captureScale = NSScreen.screens.map { $0.backingScaleFactor }.max() ?? backingScaleFactor
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         backdropLayer.frame = CGRect(origin: .zero, size: overlayFrame.size)
-        backdropLayer.contentsScale = backingScaleFactor
+        backdropLayer.contentsScale = captureScale
         backdropLayer.contents = backdrop
         ghosts.forEach(addGhostLayer)
         CATransaction.commit()
@@ -149,7 +154,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         let layer = CALayer()
         layer.contents = ghost.image
         layer.contentsGravity = .resize
-        layer.contentsScale = backingScaleFactor
+        layer.contentsScale = captureScale
         layer.frame = ghost.startFrame
         layer.shadowColor = NSColor.black.cgColor
         layer.shadowOpacity = 0.35

@@ -19,14 +19,23 @@ enum WindowSnapshot {
         ids.filter { !excluding.contains($0) }
     }
 
+    /// The window ids of `infos`, in the order the window server listed them, minus everything Rectangle
+    /// owns: the overlay itself, and panels such as the drag-to-snap footprint, which the window server
+    /// often still reports as on screen when a move begins and which must not be baked into the backdrop.
+    static func backdropCandidateIds(from infos: [[String: Any]], ownPid: pid_t) -> [CGWindowID] {
+        infos.compactMap { info -> CGWindowID? in
+            let pid = (info[kCGWindowOwnerPID as String] as? NSNumber).map { pid_t(truncating: $0) }
+            guard pid != ownPid else { return nil }
+            return (info[kCGWindowNumber as String] as? NSNumber).map { CGWindowID(truncating: $0) }
+        }
+    }
+
     /// Every on-screen window front to back, including the desktop picture, unlike `WindowUtil.getWindowList`.
     static func onScreenWindowIds() -> [CGWindowID] {
         guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
-        return infos.compactMap { info in
-            (info[kCGWindowNumber as String] as? NSNumber).map { CGWindowID(truncating: $0) }
-        }
+        return backdropCandidateIds(from: infos, ownPid: ProcessInfo.processInfo.processIdentifier)
     }
 }
 

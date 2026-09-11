@@ -53,6 +53,10 @@ final class WindowMoveTransaction {
 
     private(set) var isFinished = false
 
+    /// Called once the transaction is done with the overlay (the animation finished, or there was
+    /// nothing to animate). The animator uses it to drop its reference to this transaction.
+    var onFinished: (() -> Void)?
+
     var windowIds: [CGWindowID] {
         entries.map { $0.id }
     }
@@ -81,7 +85,7 @@ final class WindowMoveTransaction {
             Logger.log("Window animation: no window could be captured")
             return nil
         }
-        guard let backdrop = snapshots.backdropImage(rect: overlayFrame.screenFlipped, excluding: excluded) else {
+        guard let backdrop = captureBackdrop() else {
             return nil
         }
         presenter.present(overlayFrame: overlayFrame, backdrop: backdrop, ghosts: ghosts)
@@ -90,13 +94,29 @@ final class WindowMoveTransaction {
     /// Adds a window that will move later in the same action (e.g. a cooperative resize neighbour).
     /// Must be called before that window moves.
     func include(_ window: WindowFrameSource) {
-        guard !isFinished, let (entry, ghost) = capture(window) else { return }
-        entries.append(entry)
-        excluded.insert(entry.id)
-        if let backdrop = snapshots.backdropImage(rect: overlayFrame.screenFlipped, excluding: excluded) {
+        include([window])
+    }
+
+    /// Batched form of `include(_:)`: every window is captured before the backdrop is taken again, so a
+    /// group of neighbours costs one backdrop capture instead of one each. The ghosts are added before the
+    /// backdrop is swapped in, so no composited frame can show the backdrop's hole without a ghost over it.
+    func include(_ windows: [WindowFrameSource]) {
+        guard !isFinished else { return }
+
+        var ghosts: [GhostSpec] = []
+        for window in windows {
+            if let (entry, ghost) = capture(window) {
+                entries.append(entry)
+                excluded.insert(entry.id)
+                ghosts.append(ghost)
+            }
+        }
+        guard !ghosts.isEmpty else { return }
+
+        ghosts.forEach(presenter.addGhost)
+        if let backdrop = captureBackdrop() {
             presenter.updateBackdrop(backdrop)
         }
-        presenter.addGhost(ghost)
     }
 
     /// Reads the windows' final frames and starts the animation. Safe to call more than once.
@@ -113,14 +133,18 @@ final class WindowMoveTransaction {
         let moved = WindowAnimationGeometry.movedWindowIds(start: start, final: final)
         guard !moved.isEmpty else {
             presenter.dismiss()
+            onFinished?()
             return
         }
 
         let endFrames = Dictionary(uniqueKeysWithValues: moved.map { id -> (CGWindowID, CGRect) in
             (id, WindowAnimationGeometry.ghostFrame(final[id]!.screenFlipped, inOverlay: overlayFrame))
         })
-        let removing = Set(start.keys).subtracting(moved)
-        presenter.animate(endFrames: endFrames, removing: removing, duration: duration, completion: {})
+        // Nothing is removed: the backdrop has a hole wherever a captured window sits, so dropping the ghost
+        // of a window that did not move would make that window vanish for the length of the animation. Its
+        // ghost is pixel-identical to the real window underneath and simply cross-fades back into it.
+        let finished = onFinished
+        presenter.animate(endFrames: endFrames, removing: [], duration: duration, completion: { finished?() })
     }
 
     /// Drops the overlay without animating. Used when a newer transaction supersedes this one.
@@ -128,6 +152,18 @@ final class WindowMoveTransaction {
         guard !isFinished else { return }
         isFinished = true
         presenter.dismiss()
+    }
+
+    /// Captures the backdrop for the current exclusion set, logging how long the window server took:
+    /// this is the one blocking step between the user's keypress and the overlay appearing.
+    private func captureBackdrop() -> CGImage? {
+        let started = CFAbsoluteTimeGetCurrent()
+        let image = snapshots.backdropImage(rect: overlayFrame.screenFlipped, excluding: excluded)
+        if Logger.logging {
+            let ms = Int(((CFAbsoluteTimeGetCurrent() - started) * 1000).rounded())
+            Logger.log("Window animation: backdrop capture took \(ms) ms")
+        }
+        return image
     }
 
     private func capture(_ window: WindowFrameSource) -> (Entry, GhostSpec)? {
@@ -190,13 +226,28 @@ final class WindowAnimator {
                                                 snapshots: snapshots,
                                                 presenter: presenter,
                                                 duration: WindowAnimationGeometry.clampedDuration(settings.duration()))
+        transaction?.onFinished = { [weak self, weak transaction] in
+            guard let self, let transaction, self.current === transaction else { return }
+            self.current = nil
+        }
         current = transaction
         return transaction
+    }
+
+    /// True while a transaction owns the overlay. Exposed for tests.
+    var hasCurrentTransaction: Bool {
+        current != nil
     }
 
     /// Adds a window to the transaction in progress, if any. Call before that window moves.
     func include(_ window: WindowFrameSource) {
         current?.include(window)
+    }
+
+    /// Adds several windows to the transaction in progress, if any, with a single backdrop recapture.
+    /// Call before those windows move.
+    func include(_ windows: [WindowFrameSource]) {
+        current?.include(windows)
     }
 
     func perform(windows: [WindowFrameSource], covering rects: [CGRect], _ body: () -> Void) {
@@ -205,9 +256,21 @@ final class WindowAnimator {
         transaction?.end()
     }
 
+    /// Tears the overlay down now, whatever state it is in: a transaction that has not ended yet is
+    /// cancelled, and an animation already in flight is cut short rather than left over a changed display.
     func cancelCurrent() {
         current?.cancel()
         current = nil
+        presenter?.dismiss()
+    }
+
+    /// Drops an overlay that was presented but never ended, which happens when a newer action supersedes
+    /// an execution before it reaches its own `begin`. A transaction that has already ended is left alone
+    /// so a running animation plays out.
+    func cancelPending() {
+        guard let current, !current.isFinished else { return }
+        current.cancel()
+        self.current = nil
     }
 
     @objc private func screensChanged() {

@@ -89,6 +89,20 @@ final class WindowSnapshotTests: XCTestCase {
         XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [50, 40], excluding: []), [50, 40])
         XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [], excluding: [1]), [])
     }
+
+    func testBackdropCandidatesDropRectanglesOwnWindowsAndEntriesWithoutANumber() {
+        let infos: [[String: Any]] = [
+            [kCGWindowNumber as String: NSNumber(value: 50), kCGWindowOwnerPID as String: NSNumber(value: 200)],
+            // Rectangle's own panels (the drag-to-snap footprint, the overlay) must not be composited in.
+            [kCGWindowNumber as String: NSNumber(value: 40), kCGWindowOwnerPID as String: NSNumber(value: 99)],
+            [kCGWindowOwnerPID as String: NSNumber(value: 200)],
+            [kCGWindowNumber as String: NSNumber(value: 30)],
+        ]
+
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99), [50, 30])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 1), [50, 40, 30])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: [], ownPid: 99), [])
+    }
 }
 
 /// A tiny opaque image for tests that need a CGImage.
@@ -310,7 +324,9 @@ final class WindowAnimatorTests: XCTestCase {
         XCTAssertEqual(Array(presenter.animations[0].endFrames.keys), [1])
         XCTAssertEqual(presenter.animations[0].endFrames[1],
                        WindowAnimationGeometry.ghostFrame(moving.frame.screenFlipped, inOverlay: screen))
-        XCTAssertEqual(presenter.animations[0].removing, [2])
+        // The ghost of the window that did not move stays: the backdrop has a hole where it sits, so
+        // removing it would make the window disappear for the length of the animation.
+        XCTAssertEqual(presenter.animations[0].removing, [])
         XCTAssertEqual(presenter.animations[0].duration, 0.22, accuracy: 0.0001)
         XCTAssertTrue(transaction.isFinished)
     }
@@ -369,6 +385,80 @@ final class WindowAnimatorTests: XCTestCase {
         transaction.end()
         animator.include(FakeWindow(id: 3, frame: b))
         XCTAssertEqual(transaction.windowIds, [1, 2], "include after end is ignored")
+    }
+
+    func testCancelPendingDismissesAnUnfinishedTransactionOnly() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+
+        let pending = animator.begin(windows: [window], covering: [a])!
+        animator.cancelPending()
+
+        XCTAssertEqual(presenter.dismissCount, 1)
+        XCTAssertTrue(pending.isFinished)
+
+        let second = animator.begin(windows: [window], covering: [a])!
+        window.frame = b
+        second.end()
+        animator.cancelPending()
+
+        XCTAssertEqual(presenter.dismissCount, 1, "a transaction that already ended keeps animating")
+        XCTAssertEqual(presenter.animations.count, 1)
+    }
+
+    func testCancelCurrentDismissesEvenAfterEnd() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = b
+        transaction.end()
+        animator.cancelCurrent()
+
+        XCTAssertEqual(presenter.dismissCount, 1)
+    }
+
+    func testScreenChangeTearsDownTheOverlay() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = b
+        transaction.end()
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        // The animator only observes for as long as it is alive, so keep it past the notification.
+        withExtendedLifetime(animator) {
+            XCTAssertEqual(presenter.dismissCount, 1)
+        }
+    }
+
+    func testAnimationCompletionReleasesTheTransaction() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+        XCTAssertTrue(animator.hasCurrentTransaction)
+
+        window.frame = b
+        // The fake presenter completes synchronously, so the transaction is released by the time end returns.
+        transaction.end()
+        XCTAssertFalse(animator.hasCurrentTransaction)
+
+        animator.cancelPending()
+        XCTAssertEqual(presenter.dismissCount, 0)
+    }
+
+    func testBatchIncludeRecapturesTheBackdropOnce() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        let transaction = animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a])!
+
+        animator.include([FakeWindow(id: 2, frame: b), FakeWindow(id: 3, frame: b)])
+
+        XCTAssertEqual(transaction.windowIds, [1, 2, 3])
+        XCTAssertEqual(presenter.addedGhosts.map(\.id), [2, 3])
+        XCTAssertEqual(snapshots.backdropCaptures.count, 2)
+        XCTAssertEqual(snapshots.backdropCaptures[1].excluding, [1, 2, 3, 999])
+        XCTAssertEqual(presenter.backdropUpdates, 1)
     }
 
     func testPerformWrapsTheBodyInATransaction() {

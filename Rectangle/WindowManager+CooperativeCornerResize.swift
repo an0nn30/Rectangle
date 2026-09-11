@@ -1245,12 +1245,15 @@ extension WindowManager {
                        sourceAction: WindowAction,
                        movedEdge: CooperativeCornerResize.MovedEdge,
                        historyUpdate: CooperativeHistoryUpdate) {
-        adjustments.filter { $0.kind == kind }.forEach { adjustment in
+        let applicable = adjustments.filter { $0.kind == kind }
+        // One capture pass for the whole group, before any of them moves: including them one at a time
+        // would recapture the backdrop once per window.
+        WindowAnimator.shared.include(applicable.map { $0.element as WindowFrameSource })
+        applicable.forEach { adjustment in
             if CooperativeCornerResize.frameNeedsApplication(currentFrame: adjustment.element.frame.screenFlipped,
                                                              solvedFrame: adjustment.newFrame,
                                                              screenFrame: screenFrame,
                                                              layoutTolerance: layoutTolerance) {
-                WindowAnimator.shared.include(adjustment.element)
                 adjustment.element.setFrame(adjustment.newFrame.screenFlipped)
             } else {
                 Logger.log("Cooperative resize no-op for \(adjustment.id): current frame already matches solved frame")

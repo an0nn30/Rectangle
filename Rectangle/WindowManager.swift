@@ -49,6 +49,10 @@ class WindowManager {
     func execute(_ parameters: ExecutionParameters) {
         executionID &+= 1
         let currentExecutionID = executionID
+        // This execution supersedes any retry still pending from the previous one. If that execution
+        // presented an overlay it will never reach its own postProcess, so drop the overlay here rather
+        // than strand it on screen. A transaction that already ended keeps animating.
+        WindowAnimator.shared.cancelPending()
         hideSizeConstraintWarning()
 
         guard let frontmostWindowElement = parameters.windowElement ?? AccessibilityElement.getFrontWindowElement()
