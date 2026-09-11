@@ -40,11 +40,22 @@ animation is an illusion painted by a Rectangle-owned overlay window:
    best-effort fitting, cross-display retries, cooperative corner resize.
 3. **End** — read each window's actual final frame from AX. Ghosts whose
    window did not move are dropped. Each remaining ghost animates from its
-   old frame to its final frame with a decelerating ease over
-   `windowAnimationDuration` seconds (default 0.22). The overlay's alpha
-   fades to zero over the last ~35% of that time so the stretched snapshot
-   cross-fades into the freshly rendered real window. The overlay is then
-   ordered out.
+   old frame to its final frame over `windowAnimationDuration` seconds
+   (default 0.26) along cubic-bezier(0.85, 0.05, 0.05, 0.9): a gentle
+   start, a very fast middle, a settling finish. For a window whose size
+   changed, the window is captured again once the app has redrawn it at
+   the new size (first attempt after two frames, retried every frame until
+   60% of the glide), and a layer with that image, following the same
+   glide, fades in over the ghost between 28% and 62% of the glide. When
+   the glide has landed and any cross-fade has finished, the overlay fades
+   out over 0.08 s and is ordered out.
+
+   Revised 2026-09-11 from frame-by-frame measurements of a Windows 11
+   recording (Explorer maximize and restore at 60 fps). The curve fits every
+   frame of both within 1%. Windows swaps the old content for the new
+   layout during the fast middle of the motion, so two layouts are never
+   seen overlapping at rest; the original design dissolved the stretched
+   snapshot into the real window only after the motion had stopped.
 
 Why a transaction and not a change inside `AccessibilityElement.setFrame`:
 the mover chain calls `setFrame` up to three times per action
@@ -158,7 +169,7 @@ Pure functions, no AppKit windows, fully unit-tested:
 
 - `Defaults.windowAnimation = BoolDefault(key: "windowAnimation")` (off).
 - `Defaults.windowAnimationDuration = FloatDefault(key:
-  "windowAnimationDuration", defaultValue: 0.22)` — hidden, terminal only.
+  "windowAnimationDuration", defaultValue: 0.26)` — hidden, terminal only.
 - Both registered in the `Defaults.array` list like the other defaults.
 - Checkbox "Animate window movement" in the Extras popover of the General
   tab, added programmatically in `SettingsViewController` the same way the

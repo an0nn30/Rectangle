@@ -72,6 +72,46 @@ final class WindowAnimationGeometryTests: XCTestCase {
                        CGRect(x: 100, y: 50, width: 300, height: 200))
     }
 
+    func testEarlyContentWaitsForThePlannedCrossfadeWindow() {
+        let duration = 0.26
+        let timing = WindowAnimationGeometry.crossfadeTiming(elapsed: 0.033, duration: duration)
+
+        XCTAssertEqual(timing.delay, duration * WindowAnimationGeometry.crossfadeStartFraction - 0.033, accuracy: 1e-9)
+        XCTAssertEqual(timing.length,
+                       duration * (WindowAnimationGeometry.crossfadeEndFraction - WindowAnimationGeometry.crossfadeStartFraction),
+                       accuracy: 1e-9)
+    }
+
+    func testLateContentCrossfadesAtOnceForAtLeastTheMinimumLength() {
+        let duration = 0.26
+        let insideWindow = duration * 0.3
+        let pastWindow = duration * 0.9
+
+        let inside = WindowAnimationGeometry.crossfadeTiming(elapsed: insideWindow, duration: duration)
+        XCTAssertEqual(inside.delay, 0)
+        XCTAssertEqual(inside.length, max(WindowAnimationGeometry.minimumCrossfadeDuration,
+                                          duration * WindowAnimationGeometry.crossfadeEndFraction - insideWindow),
+                       accuracy: 1e-9)
+
+        let late = WindowAnimationGeometry.crossfadeTiming(elapsed: pastWindow, duration: duration)
+        XCTAssertEqual(late.delay, 0)
+        XCTAssertEqual(late.length, WindowAnimationGeometry.minimumCrossfadeDuration, accuracy: 1e-9)
+    }
+
+    func testSettledCaptureMustMatchTheNewSizeAtAWholeBackingScale() {
+        let newSize = CGSize(width: 861, height: 507)
+
+        XCTAssertTrue(WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: 1722, height: 1014), frameSize: newSize))
+        XCTAssertTrue(WindowAnimationGeometry.isSettledCapture(imageSize: newSize, frameSize: newSize))
+        XCTAssertTrue(WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: 1723, height: 1013), frameSize: newSize),
+                      "a pixel of rounding either way is fine")
+        XCTAssertFalse(WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: 894, height: 780), frameSize: newSize),
+                       "the old 447x390 backing store at 2x has not been redrawn yet")
+        XCTAssertFalse(WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: 1722, height: 900), frameSize: newSize))
+        XCTAssertFalse(WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: 4, height: 4), frameSize: newSize))
+        XCTAssertFalse(WindowAnimationGeometry.isSettledCapture(imageSize: newSize, frameSize: .zero))
+    }
+
     func testMovedWindowIdsIgnoresUnchangedMissingAndNullFinalFrames() {
         let a = CGRect(x: 0, y: 0, width: 100, height: 100)
         let b = CGRect(x: 200, y: 0, width: 100, height: 100)
@@ -163,26 +203,111 @@ final class GhostOverlayWindowTests: XCTestCase {
         XCTAssertEqual(overlay.ghostCount, 0)
     }
 
-    func testDismissDuringAnimationCancelsFadeAndResetsAlpha() {
+    func testOverlayStaysOpaqueForTheWholeGlideAndFadesOnlyAfterItLands() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+
+        let started = Date()
+        var finishedAfter: TimeInterval = 0
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.3) {
+            finishedAfter = Date().timeIntervalSince(started)
+            completed.fulfill()
+        }
+
+        RunLoop.current.run(until: started.addingTimeInterval(0.2))
+        XCTAssertTrue(overlay.isVisible)
+        XCTAssertEqual(overlay.alphaValue, 1, "nothing fades while the ghost is still gliding")
+
+        wait(for: [completed], timeout: 2)
+        XCTAssertGreaterThanOrEqual(finishedAfter, 0.3 + WindowAnimationGeometry.finalFadeDuration * 0.9)
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertEqual(overlay.alphaValue, 1)
+    }
+
+    func testCrossfadeStacksFreshContentOverAGlidingGhostOnce() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+        XCTAssertEqual(overlay.settledGhostCount, 0, "a ghost that is not gliding has nothing to cross-fade into")
+
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.2) {
+            completed.fulfill()
+        }
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+        overlay.crossfade(ghost: 5, to: makeTestImage(width: 8, height: 8))
+        XCTAssertEqual(overlay.settledGhostCount, 1)
+        XCTAssertEqual(overlay.ghostCount, 1)
+
+        wait(for: [completed], timeout: 2)
+        XCTAssertEqual(overlay.settledGhostCount, 0)
+    }
+
+    func testTheOverlayWaitsForACrossfadeThatOutlastsTheGlide() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+
+        // On a glide this short the minimum cross-fade length carries the cross-fade past the glide's end.
+        let duration = 0.08
+        let crossfade = WindowAnimationGeometry.crossfadeTiming(elapsed: 0, duration: duration)
+        let crossfadeEnd = crossfade.delay + crossfade.length
+        XCTAssertGreaterThan(crossfadeEnd, duration)
+
+        let started = Date()
+        var finishedAfter: TimeInterval = 0
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: duration) {
+            finishedAfter = Date().timeIntervalSince(started)
+            completed.fulfill()
+        }
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+
+        wait(for: [completed], timeout: 2)
+        XCTAssertGreaterThanOrEqual(finishedAfter, crossfadeEnd + WindowAnimationGeometry.finalFadeDuration * 0.9,
+                                    "the final fade must not start before the cross-fade has finished")
+    }
+
+    func testCrossfadeIsIgnoredOnceTheOverlayIsFadingAway() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.1) {
+            completed.fulfill()
+        }
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.13))
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+        XCTAssertEqual(overlay.settledGhostCount, 0)
+        wait(for: [completed], timeout: 2)
+    }
+
+    func testDismissDuringTheFinalFadeCancelsItAndResetsAlpha() {
         let overlay = GhostOverlayWindow()
         let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
         overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
 
         let completed = expectation(description: "animation completed")
         completed.isInverted = true
-        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 1.0) {
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.2) {
             completed.fulfill()
         }
 
-        // Let the fade actually start (it begins at fadeStartFraction * duration = 0.65s) before interrupting
-        // it, so this exercises dismiss() racing a genuinely in-flight animator-driven fade, not merely a
-        // scheduled one the generation guard would skip before it ever ran.
-        RunLoop.current.run(until: Date().addingTimeInterval(0.75))
+        // Interrupt the final fade itself, so dismiss() races a genuinely in-flight animator-driven fade
+        // rather than one the generation guard would skip before it started.
+        let giveUp = Date().addingTimeInterval(1)
+        while overlay.alphaValue >= 1, Date() < giveUp {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.005))
+        }
+        XCTAssertLessThan(overlay.alphaValue, 1, "the final fade is in flight")
         overlay.dismiss()
 
-        // Wait past the original fade's natural end (~1.0s) so an animation that wasn't actually cancelled
-        // has time to settle back to alpha 0 before we check it.
-        wait(for: [completed], timeout: 0.4)
+        wait(for: [completed], timeout: 0.3)
         XCTAssertFalse(overlay.isVisible)
         XCTAssertEqual(overlay.ghostCount, 0)
         XCTAssertEqual(overlay.alphaValue, 1)
@@ -206,10 +331,14 @@ final class FakeSnapshots: WindowSnapshotProvider {
     var failBackdrop = false
     var windowCaptures: [CGWindowID] = []
     var backdropCaptures: [(rect: CGRect, excluding: Set<CGWindowID>)] = []
+    /// Pixel size of the next image of a window; lets tests play an app that has or has not redrawn yet.
+    var windowImageSize: (CGWindowID) -> (width: Int, height: Int) = { _ in (4, 4) }
 
     func windowImage(windowId: CGWindowID) -> CGImage? {
         windowCaptures.append(windowId)
-        return failingWindowIds.contains(windowId) ? nil : makeTestImage()
+        guard !failingWindowIds.contains(windowId) else { return nil }
+        let size = windowImageSize(windowId)
+        return makeTestImage(width: size.width, height: size.height)
     }
 
     func backdropImage(rect: CGRect, excluding: Set<CGWindowID>) -> CGImage? {
@@ -225,6 +354,10 @@ final class FakePresenter: GhostOverlayPresenting {
     var addedGhosts: [GhostSpec] = []
     var animations: [(endFrames: [CGWindowID: CGRect], removing: Set<CGWindowID>, duration: Double)] = []
     var dismissCount = 0
+    var crossfades: [(id: CGWindowID, width: Int)] = []
+    /// When false, `animate` keeps its completion instead of calling it, like the real overlay mid-glide.
+    var completesImmediately = true
+    var pendingCompletion: (() -> Void)?
 
     func present(overlayFrame: CGRect, backdrop: CGImage?, ghosts: [GhostSpec]) {
         presentations.append((overlayFrame, ghosts))
@@ -235,9 +368,10 @@ final class FakePresenter: GhostOverlayPresenting {
 
     func animate(endFrames: [CGWindowID: CGRect], removing: Set<CGWindowID>, duration: Double, completion: @escaping () -> Void) {
         animations.append((endFrames, removing, duration))
-        completion()
+        if completesImmediately { completion() } else { pendingCompletion = completion }
     }
 
+    func crossfade(ghost id: CGWindowID, to image: CGImage) { crossfades.append((id, image.width)) }
     func dismiss() { dismissCount += 1 }
 }
 
@@ -459,6 +593,84 @@ final class WindowAnimatorTests: XCTestCase {
         XCTAssertEqual(snapshots.backdropCaptures.count, 2)
         XCTAssertEqual(snapshots.backdropCaptures[1].excluding, [1, 2, 3, 999])
         XCTAssertEqual(presenter.backdropUpdates, 1)
+    }
+
+    func testAResizedWindowCrossfadesToItsRedrawnContent() {
+        let (animator, snapshots, presenter) = makeAnimator(duration: 1)
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        snapshots.windowImageSize = { _ in (800, 600) }
+        transaction.end()
+        XCTAssertTrue(presenter.crossfades.isEmpty, "the capture waits a couple of frames for the app to redraw")
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        XCTAssertEqual(presenter.crossfades.map(\.id), [1])
+        XCTAssertEqual(presenter.crossfades.first?.width, 800)
+    }
+
+    func testStaleCapturesAreRetriedUntilTheAppHasRedrawn() {
+        let (animator, snapshots, presenter) = makeAnimator(duration: 1)
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        var postMoveCaptures = 0
+        snapshots.windowImageSize = { _ in
+            postMoveCaptures += 1
+            return postMoveCaptures <= 2 ? (600, 400) : (800, 600)   // the old 300x200 backing store, twice
+        }
+        transaction.end()
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(presenter.crossfades.map(\.id), [1])
+        XCTAssertEqual(postMoveCaptures, 3, "it stops as soon as a capture shows the new size")
+    }
+
+    func testAWindowThatOnlyMovedIsNotCapturedAgain() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = b
+        transaction.end()
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(snapshots.windowCaptures, [1])
+        XCTAssertTrue(presenter.crossfades.isEmpty)
+    }
+
+    func testAnAppThatNeverRedrawsKeepsItsSnapshotAndCapturingStops() {
+        let (animator, snapshots, presenter) = makeAnimator(duration: 0.2)
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        transaction.end()
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2 * WindowAnimationGeometry.settledCaptureDeadlineFraction + 0.15))
+        let capturesAtDeadline = snapshots.windowCaptures.count
+        XCTAssertGreaterThan(capturesAtDeadline, 2, "it kept retrying until the deadline")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertEqual(snapshots.windowCaptures.count, capturesAtDeadline, "and then gave up")
+        XCTAssertTrue(presenter.crossfades.isEmpty)
+    }
+
+    func testASupersededTransactionStopsCapturing() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        presenter.completesImmediately = false
+        let window = FakeWindow(id: 1, frame: a)
+        let first = animator.begin(windows: [window], covering: [a])!
+
+        window.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        snapshots.windowImageSize = { _ in (800, 600) }
+        first.end()
+        _ = animator.begin(windows: [window], covering: [a])
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertTrue(first.isCancelled)
+        XCTAssertTrue(presenter.crossfades.isEmpty, "the old glide's content must not land on the new one")
     }
 
     func testPerformWrapsTheBodyInATransaction() {

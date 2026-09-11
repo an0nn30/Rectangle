@@ -346,7 +346,7 @@ The animation needs the Screen Recording permission, because Rectangle takes a s
 defaults write com.knollsoft.Rectangle windowAnimation -bool true
 ```
 
-The duration in seconds (default 0.22, clamped between 0.05 and 1):
+The duration in seconds (default 0.26, clamped between 0.05 and 1):
 
 ```bash
 defaults write com.knollsoft.Rectangle windowAnimationDuration -float 0.3

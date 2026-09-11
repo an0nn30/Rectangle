@@ -56,7 +56,7 @@ class Defaults {
     static let footprintFade = OptionalBoolDefault(key: "footprintFade")
     static let footprintColor = JSONDefault<CodableColor>(key: "footprintColor")
     static let windowAnimation = BoolDefault(key: "windowAnimation")
-    static let windowAnimationDuration = FloatDefault(key: "windowAnimationDuration", defaultValue: 0.22)
+    static let windowAnimationDuration = FloatDefault(key: "windowAnimationDuration", defaultValue: 0.26)
     static let SUEnableAutomaticChecks = BoolDefault(key: "SUEnableAutomaticChecks")
     static let todo = OptionalBoolDefault(key: "todo")
     static let todoMode = BoolDefault(key: "todoMode")

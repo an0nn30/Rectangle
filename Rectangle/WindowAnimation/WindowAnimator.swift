@@ -52,6 +52,9 @@ final class WindowMoveTransaction {
     private let duration: Double
 
     private(set) var isFinished = false
+    /// Set by `cancel()`, including after `end()`: stops post-move captures, so a transaction superseded by
+    /// a newer one can never hand the shared overlay an image meant for its own, already replaced, glide.
+    private(set) var isCancelled = false
 
     /// Called once the transaction is done with the overlay (the animation finished, or there was
     /// nothing to animate). The animator uses it to drop its reference to this transaction.
@@ -142,16 +145,56 @@ final class WindowMoveTransaction {
         })
         // Nothing is removed: the backdrop has a hole wherever a captured window sits, so dropping the ghost
         // of a window that did not move would make that window vanish for the length of the animation. Its
-        // ghost is pixel-identical to the real window underneath and simply cross-fades back into it.
+        // ghost is pixel-identical to the real window underneath, so the overlay's exit reveals it unchanged.
         let finished = onFinished
         presenter.animate(endFrames: endFrames, removing: [], duration: duration, completion: { finished?() })
+
+        // A resized window's ghost is a stretched snapshot of its old layout. Capture its redrawn content and
+        // cross-fade to it mid-glide. A window that only moved needs nothing: its snapshot is still accurate.
+        let resized = moved.reduce(into: [CGWindowID: CGSize]()) { result, id in
+            if start[id]!.size != final[id]!.size { result[id] = final[id]!.size }
+        }
+        if !resized.isEmpty {
+            captureSettledContent(resized,
+                                  startedAt: CFAbsoluteTimeGetCurrent(),
+                                  after: WindowAnimationGeometry.settledCaptureDelay)
+        }
     }
 
-    /// Drops the overlay without animating. Used when a newer transaction supersedes this one.
+    /// Drops the overlay without animating if the animation has not started. Used when a newer transaction
+    /// supersedes this one; after `end()` it only stops this transaction's pending captures.
     func cancel() {
+        isCancelled = true
         guard !isFinished else { return }
         isFinished = true
         presenter.dismiss()
+    }
+
+    /// Captures each window in `pending` (id to its new size in points) once the app has redrawn it at that
+    /// size, and hands the image to the overlay. Retries once per frame until partway through the glide;
+    /// a window never caught just keeps its stretched snapshot.
+    private func captureSettledContent(_ pending: [CGWindowID: CGSize], startedAt: CFAbsoluteTime, after delay: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, !self.isCancelled else { return }
+            var remaining = pending
+            for (id, size) in pending {
+                guard let image = self.snapshots.windowImage(windowId: id),
+                      WindowAnimationGeometry.isSettledCapture(imageSize: CGSize(width: image.width, height: image.height),
+                                                               frameSize: size)
+                else { continue }
+                self.presenter.crossfade(ghost: id, to: image)
+                remaining[id] = nil
+            }
+            guard !remaining.isEmpty else { return }
+
+            let retry = WindowAnimationGeometry.settledCaptureRetryInterval
+            let deadline = self.duration * WindowAnimationGeometry.settledCaptureDeadlineFraction
+            if CFAbsoluteTimeGetCurrent() - startedAt + retry <= deadline {
+                self.captureSettledContent(remaining, startedAt: startedAt, after: retry)
+            } else {
+                Logger.log("Window animation: no redrawn content for \(remaining.keys.sorted()) in time; keeping the stretched snapshot")
+            }
+        }
     }
 
     /// Captures the backdrop for the current exclusion set, logging how long the window server took:
