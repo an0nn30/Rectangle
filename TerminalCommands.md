@@ -21,6 +21,7 @@ The preferences window is purposefully slim, but there's a lot that can be modif
 - [Add doubling/halving window sizing commands](#add-doublinghalving-window-sizing-commands)
 - [Add additional tiling and cascading commands](#add-additional-tiling-and-cascading-commands)
 - [Modify the "footprint" displayed for drag to snap area](#modify-the-footprint-displayed-for-drag-to-snap-area)
+- [Animate window movement](#animate-window-movement)
 - [Move Up/Down/Left/Right: Don't center on edge](#move-updownleftright-dont-center-on-edge)
 - [Make Smaller limits](#make-smaller-limits)
 - [Make Smaller/Make Larger size increments](#make-smallermake-larger-size-increments)
@@ -333,6 +334,22 @@ Change the animation duration. The value is a multiplier. Default is 0 (no anima
 
 ```bash
 defaults write com.knollsoft.Rectangle footprintAnimationDurationMultiplier -float <MULTIPLIER>
+```
+
+## Animate window movement
+
+Rectangle can animate a window gliding and scaling into its new position, similar to Windows 11 snap animations. This is off by default and can be toggled with the "Animate window movement" checkbox at the bottom of the "Extras" popover in the General tab of the Settings window.
+
+The animation needs the Screen Recording permission, because Rectangle takes a snapshot of the window to animate it. macOS 15 and later periodically remind you that Rectangle can record the screen; that reminder is expected. Windows move instantly (as before) whenever the permission is missing or "Reduce motion" is enabled in System Settings.
+
+```bash
+defaults write com.knollsoft.Rectangle windowAnimation -bool true
+```
+
+The duration in seconds (default 0.22, clamped between 0.05 and 1):
+
+```bash
+defaults write com.knollsoft.Rectangle windowAnimationDuration -float 0.3
 ```
 
 ## Move Up/Down/Left/Right: Don't center on edge
