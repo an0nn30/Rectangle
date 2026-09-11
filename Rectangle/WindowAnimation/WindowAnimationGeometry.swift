@@ -9,6 +9,10 @@ enum WindowAnimationGeometry {
     static let minimumDuration: Double = 0.05
     static let maximumDuration: Double = 1.0
 
+    /// Fraction of the animation after which the overlay starts fading out, so the stretched
+    /// snapshot cross-fades into the freshly rendered real window.
+    static let fadeStartFraction: Double = 0.65
+
     /// Ids Rectangle derives itself when macOS vends none (see `AccessibilityElement.deriveWindowId`)
     /// have this bit set. They are not real window ids and cannot be captured.
     static let derivedWindowIdBit: CGWindowID = 0x8000_0000

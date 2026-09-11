@@ -41,11 +41,10 @@ animation is an illusion painted by a Rectangle-owned overlay window:
 3. **End** — read each window's actual final frame from AX. Ghosts whose
    window did not move are dropped. Each remaining ghost animates from its
    old frame to its final frame with a decelerating ease over
-   `windowAnimationDuration` seconds (default 0.22). The overlay stays fully
-   opaque for the whole glide and is ordered out the moment the glide lands,
-   with no fade, revealing the real windows at exactly those frames.
-   (Revised 2026-09-11 after hands-on testing: the original end-of-glide
-   cross-fade was removed at the user's request.)
+   `windowAnimationDuration` seconds (default 0.22). The overlay's alpha
+   fades to zero over the last ~35% of that time so the stretched snapshot
+   cross-fades into the freshly rendered real window. The overlay is then
+   ordered out.
 
 Why a transaction and not a change inside `AccessibilityElement.setFrame`:
 the mover chain calls `setFrame` up to three times per action
@@ -151,7 +150,7 @@ Pure functions, no AppKit windows, fully unit-tested:
   overlay-local coordinates.
 - `movedWindows(old: [CGWindowID: CGRect], final: [CGWindowID: CGRect]) ->
   [CGWindowID]` — IDs whose frame changed.
-- Duration clamping (0.05 … 1.0 s).
+- `fadeStartFraction` and duration clamping (0.05 … 1.0 s).
 - `shouldAnimate(enabled: Bool, hasPermission: Bool, reduceMotion: Bool) ->
   Bool`.
 
@@ -254,7 +253,7 @@ The probe code is not kept.
 Build, enable the checkbox, grant permission, relaunch, and check:
 
 - A native app (Finder) — left half, right half, maximize, restore.
-- A Chromium window — same, watching for stale content revealed at the end of the glide.
+- A Chromium window — same, watching for the cross-fade at the end.
 - A cross-display move with the "next display" action.
 - A cooperative corner resize with two windows.
 - Drag-to-snap release and unsnap restore.
