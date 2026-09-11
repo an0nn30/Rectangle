@@ -143,7 +143,6 @@ final class GhostOverlayWindowTests: XCTestCase {
         overlay.dismiss()
         XCTAssertFalse(overlay.isVisible)
         XCTAssertEqual(overlay.ghostCount, 0)
-        XCTAssertEqual(overlay.alphaValue, 1)
     }
 
     func testAnimateDropsGhostsThatAreNotMovingAndCompletes() {
@@ -163,29 +162,45 @@ final class GhostOverlayWindowTests: XCTestCase {
         XCTAssertEqual(overlay.ghostCount, 0)
     }
 
-    func testDismissDuringAnimationCancelsFadeAndResetsAlpha() {
+    func testOverlayStaysOpaqueForTheWholeGlideThenDisappearsAtOnce() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.4) {
+            completed.fulfill()
+        }
+
+        // Well past the point where the old cross-fade used to begin (65% of the duration).
+        RunLoop.current.run(until: Date().addingTimeInterval(0.32))
+        XCTAssertTrue(overlay.isVisible, "the overlay must stay up until the glide lands")
+        XCTAssertEqual(overlay.alphaValue, 1, "there is no fade: the overlay stays fully opaque")
+
+        wait(for: [completed], timeout: 2)
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertEqual(overlay.ghostCount, 0)
+        XCTAssertEqual(overlay.alphaValue, 1)
+    }
+
+    func testDismissDuringAnimationSkipsItsCompletion() {
         let overlay = GhostOverlayWindow()
         let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
         overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
 
         let completed = expectation(description: "animation completed")
         completed.isInverted = true
-        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 1.0) {
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 0.6) {
             completed.fulfill()
         }
 
-        // Let the fade actually start (it begins at fadeStartFraction * duration = 0.65s) before interrupting
-        // it, so this exercises dismiss() racing a genuinely in-flight animator-driven fade, not merely a
-        // scheduled one the generation guard would skip before it ever ran.
-        RunLoop.current.run(until: Date().addingTimeInterval(0.75))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         overlay.dismiss()
 
-        // Wait past the original fade's natural end (~1.0s) so an animation that wasn't actually cancelled
-        // has time to settle back to alpha 0 before we check it.
-        wait(for: [completed], timeout: 0.4)
+        // Wait past the glide's natural end: a completion that was not suppressed would fire in this window.
+        wait(for: [completed], timeout: 0.6)
         XCTAssertFalse(overlay.isVisible)
         XCTAssertEqual(overlay.ghostCount, 0)
-        XCTAssertEqual(overlay.alphaValue, 1)
     }
 }
 

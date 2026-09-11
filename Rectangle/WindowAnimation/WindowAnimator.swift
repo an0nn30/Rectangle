@@ -142,7 +142,7 @@ final class WindowMoveTransaction {
         })
         // Nothing is removed: the backdrop has a hole wherever a captured window sits, so dropping the ghost
         // of a window that did not move would make that window vanish for the length of the animation. Its
-        // ghost is pixel-identical to the real window underneath and simply cross-fades back into it.
+        // ghost is pixel-identical to the real window underneath, so removing the overlay reveals it unchanged.
         let finished = onFinished
         presenter.animate(endFrames: endFrames, removing: [], duration: duration, completion: { finished?() })
     }

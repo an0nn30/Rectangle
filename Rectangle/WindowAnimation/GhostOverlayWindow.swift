@@ -18,8 +18,8 @@ protocol GhostOverlayPresenting: AnyObject {
     func present(overlayFrame: CGRect, backdrop: CGImage?, ghosts: [GhostSpec])
     func updateBackdrop(_ image: CGImage?)
     func addGhost(_ ghost: GhostSpec)
-    /// Glides the ghosts in `endFrames` to their new frames, removes the ghosts in `removing`,
-    /// fades the overlay out over the last part of `duration`, then hides it and calls `completion`.
+    /// Glides the ghosts in `endFrames` to their new frames and removes the ghosts in `removing`. The overlay
+    /// stays fully opaque for the whole glide and is hidden the moment it lands, then `completion` is called.
     func animate(endFrames: [CGWindowID: CGRect], removing: Set<CGWindowID>, duration: Double, completion: @escaping () -> Void)
     /// Hides the overlay immediately, cancelling any running animation. Its completion is not called.
     func dismiss()
@@ -71,7 +71,6 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         generation += 1
         clearGhosts()
         setFrame(overlayFrame, display: false)
-        resetAlpha()
         captureScale = NSScreen.screens.map { $0.backingScaleFactor }.max() ?? backingScaleFactor
 
         CATransaction.begin()
@@ -107,47 +106,30 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
 
         removing.forEach { ghostLayers.removeValue(forKey: $0)?.removeFromSuperlayer() }
 
-        // Standalone layers animate bounds and position implicitly with the transaction's timing.
+        // Standalone layers animate bounds and position implicitly with the transaction's timing. The
+        // completion block runs once the glide has landed; the overlay is then cut away with no fade, revealing
+        // the real windows, which already sit at exactly those frames.
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(controlPoints: 0.1, 0.9, 0.2, 1))
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, self.generation == thisGeneration else { return }
+            self.dismiss()
+            completion()
+        }
         for (id, end) in endFrames {
             guard let layer = ghostLayers[id] else { continue }
             layer.bounds = CGRect(origin: .zero, size: end.size)
             layer.position = CGPoint(x: end.midX, y: end.midY)
         }
         CATransaction.commit()
-
-        let fadeDelay = duration * WindowAnimationGeometry.fadeStartFraction
-        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDelay) { [weak self] in
-            guard let self, self.generation == thisGeneration else { return }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = duration - fadeDelay
-                self.animator().alphaValue = 0
-            }, completionHandler: { [weak self] in
-                guard let self, self.generation == thisGeneration else { return }
-                self.dismiss()
-                completion()
-            })
-        }
     }
 
     func dismiss() {
         generation += 1
         orderOut(nil)
-        resetAlpha()
         clearGhosts()
         backdropLayer.contents = nil
-    }
-
-    /// Sets `alphaValue` back to fully opaque, replacing (rather than merely overwriting) any fade
-    /// `animate(...)` left in flight: a plain assignment can be overwritten by the next tick of an
-    /// already-running `animator()`-driven animation, but a zero-duration animation group retargets it.
-    private func resetAlpha() {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            animator().alphaValue = 1
-        }
     }
 
     private func addGhostLayer(_ ghost: GhostSpec) {
