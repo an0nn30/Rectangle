@@ -81,3 +81,12 @@ final class WindowAnimationGeometryTests: XCTestCase {
         XCTAssertEqual(WindowAnimationGeometry.movedWindowIds(start: start, final: final), [1])
     }
 }
+
+final class WindowSnapshotTests: XCTestCase {
+
+    func testBackdropKeepsFrontToBackOrderAndDropsExcludedWindows() {
+        XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [50, 40, 30, 20], excluding: [40, 20]), [50, 30])
+        XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [50, 40], excluding: []), [50, 40])
+        XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [], excluding: [1]), [])
+    }
+}
