@@ -206,6 +206,22 @@ The original repository for MASShortcut was archived, so Rectangle uses my [fork
 
 Due to the addition of the Liquid Glass icon with a fallback for older versions of macOS, there will be a build failure on macOS versions < 26. You can delete the "Asset Catalog Other Flags" to build locally on versions < 26 (but don't check that change in if you create a pull request).
 
+### Building from the terminal
+
+With Xcode selected as the active developer directory, run these commands from the repository root:
+
+```sh
+make debug    # build/Debug/Rectangle.app, for this Mac
+make release  # build/Release/Rectangle.app, for Apple silicon and Intel Macs
+make test     # run the test suite
+```
+
+These local builds use ad-hoc signing and do not require an Apple developer account. Like Debug, they omit hardened runtime because its library validation rejects the ad-hoc-signed Sparkle framework. They are not notarized distribution builds; the project's official Release signing settings remain unchanged. The Xcode requirements and older-macOS asset catalog workaround described above also apply here.
+
+To install, quit any running copy of Rectangle and copy `build/Release/Rectangle.app` into `/Applications`. Open the installed copy and grant Accessibility access if macOS requests it. To use the optional window animations, enable **Animate window movement** under **Settings → General → Extras** and grant Screen Recording access. Rebuilding or replacing an ad-hoc-signed app can require granting these permissions again.
+
+Build output is ignored by Git. To use another output directory, pass an absolute path, for example `make release BUILD_DIR="/tmp/Rectangle Build"`.
+
 ## Credits
 
 As mentioned above, Rectangle uses a forked version of [MASShortcut](https://github.com/rxhanson/MASShortcut), which still works great, and it uses [Sparkle](https://sparkle-project.org) for updates. 
