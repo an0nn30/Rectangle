@@ -139,9 +139,44 @@ final class WindowSnapshotTests: XCTestCase {
             [kCGWindowNumber as String: NSNumber(value: 30)],
         ]
 
-        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99), [50, 30])
-        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 1), [50, 40, 30])
-        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: [], ownPid: 99), [])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99, maximumLayer: 3), [50, 30])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 1, maximumLayer: 3), [50, 40, 30])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: [], ownPid: 99, maximumLayer: 3), [])
+    }
+
+    func testBackdropCandidatesDropWindowsDrawnAboveTheOverlay() {
+        // The Dock, the menu bar and its items are drawn live above the overlay. Baked into the backdrop
+        // as well, they would show through their own translucent glass as a smeared second copy.
+        let window = { (number: Int, layer: Int) -> [String: Any] in
+            [kCGWindowNumber as String: NSNumber(value: number),
+             kCGWindowOwnerPID as String: NSNumber(value: 200),
+             kCGWindowLayer as String: NSNumber(value: layer)]
+        }
+        let infos = [window(1, 25), window(2, 24), window(3, 20), window(7, 4), window(4, 3), window(5, 0),
+                     window(6, Int(CGWindowLevelForKey(.desktopWindow)))]
+
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99, maximumLayer: 3), [4, 5, 6])
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99, maximumLayer: 20), [3, 7, 4, 5, 6])
+    }
+
+    func testBackdropDropsDockGlassButKeepsWallpaperOwnedByTheSameProcess() {
+        // macOS 26 reports both the glass Dock and a wallpaper window under the Dock's PID.
+        // Filtering by owner instead of layer would remove the wallpaper as well.
+        let dockPid = 200
+        let infos: [[String: Any]] = [
+            [kCGWindowNumber as String: 13, kCGWindowOwnerPID as String: dockPid,
+             kCGWindowLayer as String: CGWindowLevelForKey(.dockWindow)],
+            [kCGWindowNumber as String: 40, kCGWindowOwnerPID as String: 300,
+             kCGWindowLayer as String: NSWindow.Level.normal.rawValue],
+            [kCGWindowNumber as String: 1275, kCGWindowOwnerPID as String: dockPid,
+             kCGWindowLayer as String: CGWindowLevelForKey(.desktopWindow)],
+        ]
+
+        XCTAssertEqual(WindowSnapshot.backdropCandidateIds(from: infos, ownPid: 99,
+                                                           maximumLayer: WindowSnapshot.defaultMaximumLayer), [40, 1275])
+        let overlay = GhostOverlayWindow()
+        XCTAssertLessThan(overlay.level.rawValue, Int(CGWindowLevelForKey(.dockWindow)))
+        XCTAssertEqual(WindowSnapshot.defaultMaximumLayer, overlay.level.rawValue)
     }
 }
 
@@ -155,6 +190,68 @@ func makeTestImage(width: Int = 4, height: Int = 4) -> CGImage {
 }
 
 final class GhostOverlayWindowTests: XCTestCase {
+
+    func testGhostsKeepWindowServerOrderInsteadOfCallerOrder() throws {
+        let overlay = GhostOverlayWindow(windowOrder: { [1, 2, 3] })
+        defer { overlay.dismiss() }
+        let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let ghosts = [1, 3, 2].map { GhostSpec(id: CGWindowID($0), image: makeTestImage(), startFrame: frame) }
+
+        overlay.present(overlayFrame: frame, backdrop: makeTestImage(), ghosts: ghosts)
+
+        let front = try XCTUnwrap(overlay.ghostLayer(1))
+        let middle = try XCTUnwrap(overlay.ghostLayer(2))
+        let back = try XCTUnwrap(overlay.ghostLayer(3))
+        let backdrop = try XCTUnwrap(overlay.contentView?.layer?.sublayers?.first)
+        XCTAssertGreaterThan(front.zPosition, middle.zPosition)
+        XCTAssertGreaterThan(middle.zPosition, back.zPosition)
+        XCTAssertGreaterThan(back.zPosition, backdrop.zPosition)
+    }
+
+    func testLaterGhostsAndCrossfadesKeepTheOrderCapturedBeforeTheMove() throws {
+        var order: [CGWindowID] = [1, 2, 3]
+        let overlay = GhostOverlayWindow(windowOrder: { order })
+        defer { overlay.dismiss() }
+        let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        overlay.present(overlayFrame: frame, backdrop: nil,
+                        ghosts: [GhostSpec(id: 1, image: makeTestImage(), startFrame: frame)])
+
+        // Moving real windows can raise them. Late cooperative additions still belong to the original stack.
+        order = [3, 2, 1]
+        overlay.addGhost(GhostSpec(id: 3, image: makeTestImage(), startFrame: frame))
+        overlay.addGhost(GhostSpec(id: 2, image: makeTestImage(), startFrame: frame))
+        overlay.animate(endFrames: [1: frame, 2: frame, 3: frame], removing: [], duration: 0.3) {}
+        overlay.crossfade(ghost: 2, to: makeTestImage())
+
+        let front = try XCTUnwrap(overlay.ghostLayer(1))
+        let middle = try XCTUnwrap(overlay.ghostLayer(2))
+        let back = try XCTUnwrap(overlay.ghostLayer(3))
+        let settled = try XCTUnwrap(overlay.settledLayer(2))
+        XCTAssertGreaterThan(front.zPosition, middle.zPosition)
+        XCTAssertGreaterThan(middle.zPosition, back.zPosition)
+        XCTAssertEqual(settled.zPosition, middle.zPosition)
+        XCTAssertGreaterThan(front.zPosition, settled.zPosition)
+        XCTAssertGreaterThan(settled.zPosition, back.zPosition)
+    }
+
+    func testNewPresentationRefreshesWindowOrderAndKeepsUnknownGhostAboveBackdrop() throws {
+        var order: [CGWindowID] = [1, 2]
+        let overlay = GhostOverlayWindow(windowOrder: { order })
+        defer { overlay.dismiss() }
+        let frame = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let ghosts = [1, 2, 99].map { GhostSpec(id: CGWindowID($0), image: makeTestImage(), startFrame: frame) }
+        overlay.present(overlayFrame: frame, backdrop: makeTestImage(), ghosts: ghosts)
+        XCTAssertGreaterThan(try XCTUnwrap(overlay.ghostLayer(1)).zPosition,
+                             try XCTUnwrap(overlay.ghostLayer(2)).zPosition)
+
+        order = [2, 1]
+        overlay.present(overlayFrame: frame, backdrop: makeTestImage(), ghosts: ghosts)
+
+        XCTAssertGreaterThan(try XCTUnwrap(overlay.ghostLayer(2)).zPosition,
+                             try XCTUnwrap(overlay.ghostLayer(1)).zPosition)
+        XCTAssertGreaterThan(try XCTUnwrap(overlay.ghostLayer(99)).zPosition,
+                             try XCTUnwrap(overlay.contentView?.layer?.sublayers?.first).zPosition)
+    }
 
     func testOverlayNeverTakesFocusOrMouseInput() {
         let overlay = GhostOverlayWindow()

@@ -31,6 +31,9 @@ protocol GhostOverlayPresenting: AnyObject {
 
 final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
 
+    /// Above ordinary windows, below the Dock and the menu bar, which keep drawing live on top of the overlay.
+    static let windowLevel: NSWindow.Level = .floating
+
     /// Where a ghost glides from and to, in overlay coordinates, so a cross-fade layer added mid-flight can
     /// follow exactly the same path.
     private struct Glide {
@@ -39,6 +42,10 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
     }
 
     private let backdropLayer = CALayer()
+    /// WindowServer order, front to back. Kept injectable because the desktop changes independently of tests.
+    private let windowOrder: () -> [CGWindowID]
+    /// Captured before the real windows move, including windows added to the transaction later.
+    private var windowZPositions: [CGWindowID: CGFloat] = [:]
     private var ghostLayers: [CGWindowID: CALayer] = [:]
     /// The fresh-content layers stacked over their ghosts during a cross-fade.
     private var settledLayers: [CGWindowID: CALayer] = [:]
@@ -57,7 +64,8 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
     /// Bumped whenever the overlay's content is replaced or hidden, so stale animation callbacks are ignored.
     private var generation = 0
 
-    init() {
+    init(windowOrder: @escaping () -> [CGWindowID] = { WindowSnapshot.onScreenWindowIds() }) {
+        self.windowOrder = windowOrder
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
@@ -66,7 +74,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         animationBehavior = .none
-        level = .floating
+        level = GhostOverlayWindow.windowLevel
         collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary]
 
         let content = NSView()
@@ -100,6 +108,11 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
     func present(overlayFrame: CGRect, backdrop: CGImage?, ghosts: [GhostSpec]) {
         generation += 1
         clearGhosts()
+        let orderedIds = windowOrder()
+        for (index, id) in orderedIds.enumerated() {
+            // The backdrop stays at zero; reserve one for windows absent from the captured list.
+            windowZPositions[id] = CGFloat(orderedIds.count - index + 1)
+        }
         setFrame(overlayFrame, display: false)
         resetAlpha()
         captureScale = NSScreen.screens.map { $0.backingScaleFactor }.max() ?? backingScaleFactor
@@ -167,6 +180,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         layer.contents = image
         layer.contentsGravity = .resize
         layer.contentsScale = captureScale
+        layer.zPosition = ghostLayer.zPosition
         // Rests invisible at the glide's start, like the ghost (see `apply`): if the render server ever
         // shows this layer without its animations, it shows nothing at all.
         layer.opacity = 0
@@ -270,6 +284,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         layer.contents = ghost.image
         layer.contentsGravity = .resize
         layer.contentsScale = captureScale
+        layer.zPosition = windowZPositions[ghost.id] ?? 1
         layer.frame = ghost.startFrame
         layer.shadowColor = NSColor.black.cgColor
         layer.shadowOpacity = 0.35
@@ -285,6 +300,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         settledLayers.values.forEach { $0.removeFromSuperlayer() }
         settledLayers.removeAll()
         glides.removeAll()
+        windowZPositions.removeAll()
         isFinishing = false
     }
 }

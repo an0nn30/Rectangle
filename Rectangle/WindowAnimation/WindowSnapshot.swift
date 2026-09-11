@@ -8,7 +8,8 @@ import Cocoa
 protocol WindowSnapshotProvider {
     /// The window's own pixels, without its shadow. Nil when it cannot be captured.
     func windowImage(windowId: CGWindowID) -> CGImage?
-    /// Everything on screen inside `rect` except the windows in `excluding`, desktop included.
+    /// Everything on screen inside `rect` that sits below the overlay, except the windows in `excluding`,
+    /// desktop included.
     func backdropImage(rect: CGRect, excluding: Set<CGWindowID>) -> CGImage?
 }
 
@@ -19,23 +20,32 @@ enum WindowSnapshot {
         ids.filter { !excluding.contains($0) }
     }
 
-    /// The window ids of `infos`, in the order the window server listed them, minus everything Rectangle
-    /// owns: the overlay itself, and panels such as the drag-to-snap footprint, which the window server
-    /// often still reports as on screen when a move begins and which must not be baked into the backdrop.
-    static func backdropCandidateIds(from infos: [[String: Any]], ownPid: pid_t) -> [CGWindowID] {
+    /// Highest window level the backdrop keeps: the overlay's own. Anything above it (the Dock, the menu bar
+    /// and its items) is drawn live on top of the overlay by the window server.
+    static let defaultMaximumLayer = Int(GhostOverlayWindow.windowLevel.rawValue)
+
+    /// The window ids of `infos`, in the order the window server listed them, minus
+    /// - everything Rectangle owns: the overlay itself, and panels such as the drag-to-snap footprint, which
+    ///   the window server often still reports as on screen when a move begins; and
+    /// - every window above `maximumLayer`. Those are drawn live over the overlay anyway, and a frozen copy
+    ///   underneath them shows through translucent ones: the Dock's glass would blur its own icons.
+    static func backdropCandidateIds(from infos: [[String: Any]], ownPid: pid_t, maximumLayer: Int) -> [CGWindowID] {
         infos.compactMap { info -> CGWindowID? in
             let pid = (info[kCGWindowOwnerPID as String] as? NSNumber).map { pid_t(truncating: $0) }
-            guard pid != ownPid else { return nil }
+            let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+            guard pid != ownPid, layer <= maximumLayer else { return nil }
             return (info[kCGWindowNumber as String] as? NSNumber).map { CGWindowID(truncating: $0) }
         }
     }
 
-    /// Every on-screen window front to back, including the desktop picture, unlike `WindowUtil.getWindowList`.
+    /// Every on-screen window at or below the overlay's level, front to back, including the desktop picture
+    /// (unlike `WindowUtil.getWindowList`).
     static func onScreenWindowIds() -> [CGWindowID] {
         guard let infos = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
-        return backdropCandidateIds(from: infos, ownPid: ProcessInfo.processInfo.processIdentifier)
+        return backdropCandidateIds(from: infos, ownPid: ProcessInfo.processInfo.processIdentifier,
+                                    maximumLayer: defaultMaximumLayer)
     }
 }
 
