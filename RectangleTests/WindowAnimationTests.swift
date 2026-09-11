@@ -174,3 +174,212 @@ final class GhostOverlayWindowTests: XCTestCase {
         XCTAssertEqual(overlay.alphaValue, 1)
     }
 }
+
+final class FakeWindow: WindowFrameSource {
+    var id: CGWindowID?
+    var frame: CGRect
+
+    init(id: CGWindowID?, frame: CGRect) {
+        self.id = id
+        self.frame = frame
+    }
+
+    func animationWindowId() -> CGWindowID? { id }
+}
+
+final class FakeSnapshots: WindowSnapshotProvider {
+    var failingWindowIds: Set<CGWindowID> = []
+    var failBackdrop = false
+    var windowCaptures: [CGWindowID] = []
+    var backdropCaptures: [(rect: CGRect, excluding: Set<CGWindowID>)] = []
+
+    func windowImage(windowId: CGWindowID) -> CGImage? {
+        windowCaptures.append(windowId)
+        return failingWindowIds.contains(windowId) ? nil : makeTestImage()
+    }
+
+    func backdropImage(rect: CGRect, excluding: Set<CGWindowID>) -> CGImage? {
+        backdropCaptures.append((rect, excluding))
+        return failBackdrop ? nil : makeTestImage()
+    }
+}
+
+final class FakePresenter: GhostOverlayPresenting {
+    let overlayWindowId: CGWindowID = 999
+    var presentations: [(frame: CGRect, ghosts: [GhostSpec])] = []
+    var backdropUpdates = 0
+    var addedGhosts: [GhostSpec] = []
+    var animations: [(endFrames: [CGWindowID: CGRect], removing: Set<CGWindowID>, duration: Double)] = []
+    var dismissCount = 0
+
+    func present(overlayFrame: CGRect, backdrop: CGImage?, ghosts: [GhostSpec]) {
+        presentations.append((overlayFrame, ghosts))
+    }
+
+    func updateBackdrop(_ image: CGImage?) { backdropUpdates += 1 }
+    func addGhost(_ ghost: GhostSpec) { addedGhosts.append(ghost) }
+
+    func animate(endFrames: [CGWindowID: CGRect], removing: Set<CGWindowID>, duration: Double, completion: @escaping () -> Void) {
+        animations.append((endFrames, removing, duration))
+        completion()
+    }
+
+    func dismiss() { dismissCount += 1 }
+}
+
+final class WindowAnimatorTests: XCTestCase {
+
+    private let screen = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    private let a = CGRect(x: 10, y: 10, width: 300, height: 200)
+    private let b = CGRect(x: 500, y: 10, width: 300, height: 200)
+
+    private func makeAnimator(enabled: Bool = true, permission: Bool = true, reduceMotion: Bool = false,
+                              duration: Double = 0.22) -> (WindowAnimator, FakeSnapshots, FakePresenter) {
+        let snapshots = FakeSnapshots()
+        let presenter = FakePresenter()
+        let settings = WindowAnimationSettings(isEnabled: { enabled },
+                                               hasPermission: { permission },
+                                               reduceMotion: { reduceMotion },
+                                               duration: { duration },
+                                               screenFrames: { [self.screen] })
+        let animator = WindowAnimator(snapshots: snapshots, presenterFactory: { presenter }, settings: settings)
+        return (animator, snapshots, presenter)
+    }
+
+    func testBeginDoesNothingWhenAnimationIsNotAllowed() {
+        for (animator, _, presenter) in [makeAnimator(enabled: false), makeAnimator(permission: false), makeAnimator(reduceMotion: true)] {
+            XCTAssertNil(animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a]))
+            XCTAssertTrue(presenter.presentations.isEmpty)
+        }
+    }
+
+    func testBeginCapturesEveryWindowAndPresentsTheOverlayOverTheirScreen() {
+        let (animator, snapshots, presenter) = makeAnimator()
+
+        let transaction = animator.begin(windows: [FakeWindow(id: 1, frame: a), FakeWindow(id: 2, frame: b)], covering: [a])
+
+        XCTAssertNotNil(transaction)
+        XCTAssertEqual(transaction?.windowIds, [1, 2])
+        XCTAssertEqual(snapshots.windowCaptures, [1, 2])
+        XCTAssertEqual(snapshots.backdropCaptures.count, 1)
+        XCTAssertEqual(snapshots.backdropCaptures[0].excluding, [1, 2, 999])
+        XCTAssertEqual(snapshots.backdropCaptures[0].rect, screen.screenFlipped)
+        XCTAssertEqual(presenter.presentations.count, 1)
+        XCTAssertEqual(presenter.presentations[0].frame, screen)
+        XCTAssertEqual(presenter.presentations[0].ghosts.map(\.id), [1, 2])
+    }
+
+    func testWindowsThatCannotBeCapturedAreLeftOut() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        snapshots.failingWindowIds = [3]
+        let derived = AccessibilityElement.deriveWindowId(fromElementHash: 5)
+
+        let transaction = animator.begin(windows: [FakeWindow(id: nil, frame: a),
+                                                   FakeWindow(id: derived, frame: a),
+                                                   FakeWindow(id: 3, frame: a),
+                                                   FakeWindow(id: 4, frame: .null),
+                                                   FakeWindow(id: 5, frame: b)],
+                                         covering: [a])
+
+        XCTAssertEqual(transaction?.windowIds, [5])
+        XCTAssertEqual(presenter.presentations[0].ghosts.map(\.id), [5])
+    }
+
+    func testBeginIsAbortedWhenNothingOrNoBackdropCanBeCaptured() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        snapshots.failingWindowIds = [1]
+        XCTAssertNil(animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a]))
+
+        snapshots.failingWindowIds = []
+        snapshots.failBackdrop = true
+        XCTAssertNil(animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a]))
+
+        XCTAssertTrue(presenter.presentations.isEmpty)
+    }
+
+    func testEndAnimatesOnlyTheWindowsThatMoved() {
+        let (animator, _, presenter) = makeAnimator()
+        let moving = FakeWindow(id: 1, frame: a)
+        let still = FakeWindow(id: 2, frame: b)
+        let transaction = animator.begin(windows: [moving, still], covering: [a])!
+
+        moving.frame = CGRect(x: 100, y: 100, width: 400, height: 300)
+        transaction.end()
+
+        XCTAssertEqual(presenter.animations.count, 1)
+        XCTAssertEqual(Array(presenter.animations[0].endFrames.keys), [1])
+        XCTAssertEqual(presenter.animations[0].endFrames[1],
+                       WindowAnimationGeometry.ghostFrame(moving.frame.screenFlipped, inOverlay: screen))
+        XCTAssertEqual(presenter.animations[0].removing, [2])
+        XCTAssertEqual(presenter.animations[0].duration, 0.22, accuracy: 0.0001)
+        XCTAssertTrue(transaction.isFinished)
+    }
+
+    func testEndWithoutAnyMovementJustHidesTheOverlay() {
+        let (animator, _, presenter) = makeAnimator()
+        let transaction = animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a])!
+
+        transaction.end()
+
+        XCTAssertTrue(presenter.animations.isEmpty)
+        XCTAssertEqual(presenter.dismissCount, 1)
+    }
+
+    func testEndIsIdempotent() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let transaction = animator.begin(windows: [window], covering: [a])!
+        window.frame = b
+
+        transaction.end()
+        transaction.end()
+
+        XCTAssertEqual(presenter.animations.count, 1)
+    }
+
+    func testANewTransactionCancelsTheRunningOne() {
+        let (animator, _, presenter) = makeAnimator()
+        let window = FakeWindow(id: 1, frame: a)
+        let first = animator.begin(windows: [window], covering: [a])!
+
+        let second = animator.begin(windows: [window], covering: [a])
+        window.frame = b
+        first.end()
+
+        XCTAssertNotNil(second)
+        XCTAssertTrue(first.isFinished)
+        XCTAssertEqual(presenter.dismissCount, 1)
+        XCTAssertTrue(presenter.animations.isEmpty, "a cancelled transaction must not animate")
+        XCTAssertEqual(presenter.presentations.count, 2)
+    }
+
+    func testIncludeAddsAGhostAndRefreshesTheBackdrop() {
+        let (animator, snapshots, presenter) = makeAnimator()
+        let transaction = animator.begin(windows: [FakeWindow(id: 1, frame: a)], covering: [a])!
+
+        animator.include(FakeWindow(id: 2, frame: b))
+        animator.include(FakeWindow(id: 2, frame: b))
+
+        XCTAssertEqual(transaction.windowIds, [1, 2])
+        XCTAssertEqual(presenter.addedGhosts.map(\.id), [2])
+        XCTAssertEqual(snapshots.backdropCaptures.count, 2)
+        XCTAssertEqual(snapshots.backdropCaptures[1].excluding, [1, 2, 999])
+        XCTAssertEqual(presenter.backdropUpdates, 1)
+
+        transaction.end()
+        animator.include(FakeWindow(id: 3, frame: b))
+        XCTAssertEqual(transaction.windowIds, [1, 2], "include after end is ignored")
+    }
+
+    func testPerformWrapsTheBodyInATransaction() {
+        let (animator, _, presenter) = makeAnimator(duration: 5)
+        let window = FakeWindow(id: 1, frame: a)
+
+        animator.perform(windows: [window], covering: [a]) {
+            window.frame = b
+        }
+
+        XCTAssertEqual(presenter.animations.count, 1)
+        XCTAssertEqual(presenter.animations[0].duration, WindowAnimationGeometry.maximumDuration)
+    }
+}
