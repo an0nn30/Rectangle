@@ -1250,6 +1250,7 @@ extension WindowManager {
                                                              solvedFrame: adjustment.newFrame,
                                                              screenFrame: screenFrame,
                                                              layoutTolerance: layoutTolerance) {
+                WindowAnimator.shared.include(adjustment.element)
                 adjustment.element.setFrame(adjustment.newFrame.screenFlipped)
             } else {
                 Logger.log("Cooperative resize no-op for \(adjustment.id): current frame already matches solved frame")
@@ -1425,7 +1426,8 @@ extension WindowManager {
                                                  usableScreens: result.usableScreens,
                                                  visibleFrameOfScreen: result.visibleFrameOfScreen,
                                                  source: result.source,
-                                                 isFixedSize: result.isFixedSize)
+                                                 isFixedSize: result.isFixedSize,
+                                                 animation: result.animation)
             moveWindow(toRect: frame, result: focusedResult)
         } else {
             Logger.log("Cooperative resize focused no-op: current frame already matches solved frame")

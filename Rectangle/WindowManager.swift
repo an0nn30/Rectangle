@@ -70,7 +70,10 @@ class WindowManager {
                 return
             }
             if let restoreRect = AppDelegate.windowHistory.restoreRects[windowId] {
-                frontmostWindowElement.setFrame(restoreRect)
+                WindowAnimator.shared.perform(windows: [frontmostWindowElement],
+                                              covering: [frontmostWindowElement.frame.screenFlipped, restoreRect.screenFlipped]) {
+                    frontmostWindowElement.setFrame(restoreRect)
+                }
             }
             AppDelegate.windowHistory.lastRectangleActions.removeValue(forKey: windowId)
             return
@@ -193,6 +196,13 @@ class WindowManager {
             return
         }
 
+        var animatedWindows: [WindowFrameSource] = [frontmostWindowElement]
+        if let cooperativeCornerPlan {
+            animatedWindows += cooperativeCornerPlan.adjustments.map { $0.element as WindowFrameSource }
+        }
+        let animation = WindowAnimator.shared.begin(windows: animatedWindows,
+                                                    covering: [currentNormalizedRect, calcResult.rect])
+
         let resultParameters = ResultParameters(windowId: windowId,
                                                 action: action,
                                                 windowElement: frontmostWindowElement,
@@ -200,7 +210,8 @@ class WindowManager {
                                                 usableScreens: sourceScreens,
                                                 visibleFrameOfScreen: visibleFrameOfDestinationScreen,
                                                 source: parameters.source,
-                                                isFixedSize: isFixedSize)
+                                                isFixedSize: isFixedSize,
+                                                animation: animation)
         
         var resultingRect: CGRect
         if let cooperativeCornerPlan {
@@ -279,6 +290,8 @@ class WindowManager {
     }
 
     func postProcess(result: ResultParameters, resultingRect: CGRect) {
+        result.animation?.end()
+
         let calcResult = result.calcResult
 
         if WindowSizeConstraint.isExceeded(requested: calcResult.rect, actual: resultingRect, action: result.action) {
@@ -326,6 +339,8 @@ struct ResultParameters {
     let visibleFrameOfScreen: CGRect
     let source: ExecutionSource
     let isFixedSize: Bool
+    /// The animated move this result belongs to; ended in `postProcess`.
+    let animation: WindowMoveTransaction?
 }
 
 struct RectangleAction {
