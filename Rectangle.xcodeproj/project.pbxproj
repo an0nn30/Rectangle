@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7A11A1010000000000000101 /* WindowAnimationGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000101 /* WindowAnimationGeometry.swift */; };
 		7A11A1010000000000000201 /* WindowAnimationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000201 /* WindowAnimationTests.swift */; };
 		01f52cab9bce43359775bdd7 /* JSONDefaultTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = de0950b8b00f40308934a523 /* JSONDefaultTests.swift */; };
 		05DBEA44B55E6F8C5FC3D6E0 /* MiddleLeftTwelfthCalculation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEABF10E66D648DDB37DABBA /* MiddleLeftTwelfthCalculation.swift */; };
@@ -231,6 +232,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		7A11A1000000000000000101 /* WindowAnimationGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAnimationGeometry.swift; sourceTree = "<group>"; };
 		7A11A1000000000000000201 /* WindowAnimationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAnimationTests.swift; sourceTree = "<group>"; };
 		16B4044DB4809116039F96EB /* SixteenthsRepeated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SixteenthsRepeated.swift; sourceTree = "<group>"; };
 		246168B345ECE6C375ACEEB7 /* BottomLeftTwelfthCalculation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomLeftTwelfthCalculation.swift; sourceTree = "<group>"; };
@@ -472,6 +474,7 @@
 		7A11A1FF000000000000000A /* WindowAnimation */ = {
 			isa = PBXGroup;
 			children = (
+				7A11A1000000000000000101 /* WindowAnimationGeometry.swift */,
 			);
 			path = WindowAnimation;
 			sourceTree = "<group>";
@@ -1031,6 +1034,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A11A1010000000000000101 /* WindowAnimationGeometry.swift in Sources */,
 				98A009B32512536900CFBF0C /* LastFourthCalculation.swift in Sources */,
 				98A009BB2512539900CFBF0C /* BottomLeftSixthCalculation.swift in Sources */,
 				9821402322B3886100ABFB3F /* CenterCalculation.swift in Sources */,
