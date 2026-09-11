@@ -8185,6 +8185,21 @@
         }
       }
     },
+    "Animate window movement" : {
+
+    },
+    "Later" : {
+
+    },
+    "Rectangle takes a snapshot of a window to animate it. If macOS just asked, choose Allow. Otherwise enable Rectangle under Privacy & Security > Screen Recording. Quit and reopen Rectangle afterwards. Until then, windows move instantly." : {
+
+    },
+    "Screen Recording permission is needed to animate window movement" : {
+
+    },
+    "Windows glide and scale into place, like Windows 11. Needs the Screen Recording permission; windows move instantly without it or when Reduce Motion is on." : {
+
+    },
     "adp-cN-qkh.title" : {
       "comment" : "Class = \"NSTextFieldCell\"; title = \"Top Left\"; ObjectID = \"adp-cN-qkh\";",
       "extractionState" : "extracted_with_value",

@@ -52,7 +52,8 @@ class SettingsViewController: NSViewController {
     private var autoMaximizeCheckbox: NSButton?
     private var halvesPreserveOtherAxisSizeCheckbox: NSButton?
     private var repeatedMaximizeRestoresPreviousCheckbox: NSButton?
-    
+    private var windowAnimationCheckbox: NSButton?
+
     @IBAction func toggleLaunchOnLogin(_ sender: NSButton) {
         let newSetting: Bool = sender.state == .on
         if #available(macOS 13, *) {
@@ -196,6 +197,14 @@ class SettingsViewController: NSViewController {
 
     @objc func toggleRepeatedMaximizeRestoresPrevious(_ sender: NSButton) {
         Defaults.repeatedMaximizeRestoresPrevious.enabled = sender.state == .on
+    }
+
+    @objc func toggleWindowAnimation(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        Defaults.windowAnimation.enabled = enabled
+        if enabled {
+            ScreenRecordingAuthorization.requestIfNeeded()
+        }
     }
 
     @IBAction func toggleTodoMode(_ sender: NSButton) {
@@ -989,6 +998,15 @@ class SettingsViewController: NSViewController {
             mainStackView.addArrangedSubview(repeatedMaximizeCheckbox)
             repeatedMaximizeRestoresPreviousCheckbox = repeatedMaximizeCheckbox
 
+            let windowAnimationCheckbox = NSButton(checkboxWithTitle: NSLocalizedString("Animate window movement", tableName: "Main", value: "", comment: ""), target: self, action: #selector(toggleWindowAnimation(_:)))
+            windowAnimationCheckbox.state = Defaults.windowAnimation.enabled ? .on : .off
+            windowAnimationCheckbox.toolTip = NSLocalizedString("Windows glide and scale into place, like Windows 11. Needs the Screen Recording permission; windows move instantly without it or when Reduce Motion is on.", tableName: "Main", value: "", comment: "")
+            windowAnimationCheckbox.translatesAutoresizingMaskIntoConstraints = false
+            windowAnimationCheckbox.alignment = .left
+
+            mainStackView.addArrangedSubview(windowAnimationCheckbox)
+            self.windowAnimationCheckbox = windowAnimationCheckbox
+
             NSLayoutConstraint.activate([
                 headerLabel.widthAnchor.constraint(equalTo: mainStackView.widthAnchor),
                 splitRatioHeaderLabel.widthAnchor.constraint(equalTo: mainStackView.widthAnchor),
@@ -1207,6 +1225,7 @@ class SettingsViewController: NSViewController {
 
         halvesPreserveOtherAxisSizeCheckbox?.state = Defaults.halvesPreserveOtherAxisSize.enabled ? .on : .off
         repeatedMaximizeRestoresPreviousCheckbox?.state = Defaults.repeatedMaximizeRestoresPrevious.enabled ? .on : .off
+        windowAnimationCheckbox?.state = Defaults.windowAnimation.enabled ? .on : .off
 
         if StageUtil.stageCapable {
             stageSlider.intValue = Int32(Defaults.stageSize.value)
