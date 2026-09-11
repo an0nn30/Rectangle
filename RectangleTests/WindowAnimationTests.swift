@@ -148,4 +148,29 @@ final class GhostOverlayWindowTests: XCTestCase {
         XCTAssertFalse(overlay.isVisible)
         XCTAssertEqual(overlay.ghostCount, 0)
     }
+
+    func testDismissDuringAnimationCancelsFadeAndResetsAlpha() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [ghost])
+
+        let completed = expectation(description: "animation completed")
+        completed.isInverted = true
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [], duration: 1.0) {
+            completed.fulfill()
+        }
+
+        // Let the fade actually start (it begins at fadeStartFraction * duration = 0.65s) before interrupting
+        // it, so this exercises dismiss() racing a genuinely in-flight animator-driven fade, not merely a
+        // scheduled one the generation guard would skip before it ever ran.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.75))
+        overlay.dismiss()
+
+        // Wait past the original fade's natural end (~1.0s) so an animation that wasn't actually cancelled
+        // has time to settle back to alpha 0 before we check it.
+        wait(for: [completed], timeout: 0.4)
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertEqual(overlay.ghostCount, 0)
+        XCTAssertEqual(overlay.alphaValue, 1)
+    }
 }

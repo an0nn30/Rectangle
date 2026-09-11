@@ -67,7 +67,7 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         generation += 1
         clearGhosts()
         setFrame(overlayFrame, display: false)
-        alphaValue = 1
+        resetAlpha()
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -130,9 +130,19 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
     func dismiss() {
         generation += 1
         orderOut(nil)
-        alphaValue = 1
+        resetAlpha()
         clearGhosts()
         backdropLayer.contents = nil
+    }
+
+    /// Sets `alphaValue` back to fully opaque, replacing (rather than merely overwriting) any fade
+    /// `animate(...)` left in flight: a plain assignment can be overwritten by the next tick of an
+    /// already-running `animator()`-driven animation, but a zero-duration animation group retargets it.
+    private func resetAlpha() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            animator().alphaValue = 1
+        }
     }
 
     private func addGhostLayer(_ ghost: GhostSpec) {
