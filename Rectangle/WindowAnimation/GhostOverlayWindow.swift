@@ -93,6 +93,10 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         settledLayers.count
     }
 
+    /// The layer drawing a ghost, and the one cross-fading it to fresh content. Exposed for tests.
+    func ghostLayer(_ id: CGWindowID) -> CALayer? { ghostLayers[id] }
+    func settledLayer(_ id: CGWindowID) -> CALayer? { settledLayers[id] }
+
     func present(overlayFrame: CGRect, backdrop: CGImage?, ghosts: [GhostSpec]) {
         generation += 1
         clearGhosts()
@@ -138,12 +142,16 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         crossfadeEnd = 0
         isFinishing = false
         glides.removeAll()
+        // One transaction, so every ghost's glide reaches the render server together.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         for (id, end) in endFrames {
             guard let layer = ghostLayers[id] else { continue }
             let glide = Glide(from: layer.frame, to: end)
             glides[id] = glide
             apply(glide, to: layer)
         }
+        CATransaction.commit()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             self?.finishWhenSettled(generation: thisGeneration, completion: completion)
@@ -159,13 +167,9 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         layer.contents = image
         layer.contentsGravity = .resize
         layer.contentsScale = captureScale
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.frame = glide.from
-        contentView?.layer?.insertSublayer(layer, above: ghostLayer)
-        CATransaction.commit()
-        settledLayers[id] = layer
-        apply(glide, to: layer)
+        // Rests invisible at the glide's start, like the ghost (see `apply`): if the render server ever
+        // shows this layer without its animations, it shows nothing at all.
+        layer.opacity = 0
 
         let now = CACurrentMediaTime()
         let timing = WindowAnimationGeometry.crossfadeTiming(elapsed: now - glideStart, duration: glideDuration)
@@ -174,9 +178,19 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
         fade.toValue = 1
         fade.beginTime = layer.convertTime(now + timing.delay, from: nil)
         fade.duration = timing.length
-        fade.fillMode = .backwards
+        fade.fillMode = .both
+        fade.isRemovedOnCompletion = false
         fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+
+        // One transaction: the layer, its glide, and its fade reach the render server together.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.frame = glide.from
+        contentView?.layer?.insertSublayer(layer, above: ghostLayer)
+        apply(glide, to: layer)
         layer.add(fade, forKey: "crossfade")
+        CATransaction.commit()
+        settledLayers[id] = layer
         crossfadeEnd = max(crossfadeEnd, now + timing.delay + timing.length)
     }
 
@@ -190,17 +204,17 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
 
     /// Moves `layer` along `glide` with the glide's timing curve. The animation is anchored at the glide's
     /// start time, so a layer added mid-flight lands at exactly the same point as the ghost it covers.
+    ///
+    /// The layer's own (model) frame is left at the glide's start and the animation holds its end state
+    /// instead of the model jumping to the destination. Whenever the render server draws a frame without the
+    /// animation applied (it happened, intermittently, just before the glide began), the ghost then shows
+    /// exactly where it already was rather than flashing at the destination. The overlay is torn down after
+    /// the glide, so the model never needs to catch up.
     private func apply(_ glide: Glide, to layer: CALayer) {
         let fromBounds = CGRect(origin: .zero, size: glide.from.size)
         let toBounds = CGRect(origin: .zero, size: glide.to.size)
         let fromPosition = CGPoint(x: glide.from.midX, y: glide.from.midY)
         let toPosition = CGPoint(x: glide.to.midX, y: glide.to.midY)
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.bounds = toBounds
-        layer.position = toPosition
-        CATransaction.commit()
 
         let (x1, y1, x2, y2) = WindowAnimationGeometry.glideTimingControlPoints
         let timing = CAMediaTimingFunction(controlPoints: x1, y1, x2, y2)
@@ -212,7 +226,8 @@ final class GhostOverlayWindow: NSPanel, GhostOverlayPresenting {
             animation.toValue = to
             animation.beginTime = begin
             animation.duration = glideDuration
-            animation.fillMode = .backwards
+            animation.fillMode = .both
+            animation.isRemovedOnCompletion = false
             animation.timingFunction = timing
             layer.add(animation, forKey: "glide-\(keyPath)")
         }

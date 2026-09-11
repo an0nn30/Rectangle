@@ -272,6 +272,32 @@ final class GhostOverlayWindowTests: XCTestCase {
                                     "the final fade must not start before the cross-fade has finished")
     }
 
+    func testLayersRestAtTheGlideStartSoAFrameDrawnWithoutTheAnimationCannotJumpAhead() {
+        let overlay = GhostOverlayWindow()
+        let start = CGRect(x: 0, y: 0, width: 40, height: 40)
+        let end = CGRect(x: 50, y: 50, width: 80, height: 80)
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil,
+                        ghosts: [GhostSpec(id: 1, image: makeTestImage(), startFrame: start)])
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: end], removing: [], duration: 0.3) { completed.fulfill() }
+        overlay.crossfade(ghost: 1, to: makeTestImage(width: 8, height: 8))
+
+        let ghost = try? XCTUnwrap(overlay.ghostLayer(1))
+        let settled = try? XCTUnwrap(overlay.settledLayer(1))
+        XCTAssertEqual(ghost?.frame, start, "the ghost's resting frame stays at the start")
+        XCTAssertEqual(settled?.frame, start, "so does the fresh-content layer's")
+        XCTAssertEqual(settled?.opacity, 0, "and that layer rests invisible until its fade shows it")
+        for layer in [ghost, settled].compactMap({ $0 }) {
+            for key in ["glide-bounds", "glide-position"] {
+                let glide = layer.animation(forKey: key)
+                XCTAssertEqual(glide?.fillMode, .both, key)
+                XCTAssertEqual(glide?.isRemovedOnCompletion, false, "\(key) holds the end state after landing")
+            }
+        }
+        XCTAssertEqual(settled?.animation(forKey: "crossfade")?.isRemovedOnCompletion, false)
+        wait(for: [completed], timeout: 2)
+    }
+
     func testCrossfadeIsIgnoredOnceTheOverlayIsFadingAway() {
         let overlay = GhostOverlayWindow()
         let ghost = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
