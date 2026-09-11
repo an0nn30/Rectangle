@@ -90,3 +90,62 @@ final class WindowSnapshotTests: XCTestCase {
         XCTAssertEqual(WindowSnapshot.backdropWindowIds(onScreen: [], excluding: [1]), [])
     }
 }
+
+/// A tiny opaque image for tests that need a CGImage.
+func makeTestImage(width: Int = 4, height: Int = 4) -> CGImage {
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    return context.makeImage()!
+}
+
+final class GhostOverlayWindowTests: XCTestCase {
+
+    func testOverlayNeverTakesFocusOrMouseInput() {
+        let overlay = GhostOverlayWindow()
+
+        XCTAssertTrue(overlay.ignoresMouseEvents)
+        XCTAssertFalse(overlay.canBecomeKey)
+        XCTAssertFalse(overlay.hidesOnDeactivate)
+        XCTAssertFalse(overlay.hasShadow)
+        XCTAssertEqual(overlay.level, .floating)
+        XCTAssertTrue(overlay.collectionBehavior.contains(.canJoinAllSpaces))
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertGreaterThan(overlay.overlayWindowId, 0)
+    }
+
+    func testPresentShowsGhostsAndDismissClearsThem() {
+        let overlay = GhostOverlayWindow()
+        let ghost = GhostSpec(id: 7, image: makeTestImage(), startFrame: CGRect(x: 10, y: 10, width: 40, height: 40))
+
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: makeTestImage(), ghosts: [ghost])
+        XCTAssertTrue(overlay.isVisible)
+        XCTAssertEqual(overlay.ghostCount, 1)
+
+        overlay.addGhost(GhostSpec(id: 8, image: makeTestImage(), startFrame: CGRect(x: 60, y: 10, width: 40, height: 40)))
+        XCTAssertEqual(overlay.ghostCount, 2)
+
+        overlay.dismiss()
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertEqual(overlay.ghostCount, 0)
+        XCTAssertEqual(overlay.alphaValue, 1)
+    }
+
+    func testAnimateDropsGhostsThatAreNotMovingAndCompletes() {
+        let overlay = GhostOverlayWindow()
+        let moving = GhostSpec(id: 1, image: makeTestImage(), startFrame: CGRect(x: 0, y: 0, width: 40, height: 40))
+        let still = GhostSpec(id: 2, image: makeTestImage(), startFrame: CGRect(x: 100, y: 0, width: 40, height: 40))
+        overlay.present(overlayFrame: CGRect(x: 0, y: 0, width: 200, height: 200), backdrop: nil, ghosts: [moving, still])
+
+        let completed = expectation(description: "animation completed")
+        overlay.animate(endFrames: [1: CGRect(x: 50, y: 50, width: 80, height: 80)], removing: [2], duration: 0.05) {
+            completed.fulfill()
+        }
+        XCTAssertEqual(overlay.ghostCount, 1)
+
+        wait(for: [completed], timeout: 2)
+        XCTAssertFalse(overlay.isVisible)
+        XCTAssertEqual(overlay.ghostCount, 0)
+    }
+}

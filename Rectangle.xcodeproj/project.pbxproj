@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		7A11A1010000000000000103 /* GhostOverlayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000103 /* GhostOverlayWindow.swift */; };
 		7A11A1010000000000000102 /* WindowSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000102 /* WindowSnapshot.swift */; };
 		7A11A1010000000000000101 /* WindowAnimationGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000101 /* WindowAnimationGeometry.swift */; };
 		7A11A1010000000000000201 /* WindowAnimationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A11A1000000000000000201 /* WindowAnimationTests.swift */; };
@@ -233,6 +234,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		7A11A1000000000000000103 /* GhostOverlayWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostOverlayWindow.swift; sourceTree = "<group>"; };
 		7A11A1000000000000000102 /* WindowSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSnapshot.swift; sourceTree = "<group>"; };
 		7A11A1000000000000000101 /* WindowAnimationGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAnimationGeometry.swift; sourceTree = "<group>"; };
 		7A11A1000000000000000201 /* WindowAnimationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAnimationTests.swift; sourceTree = "<group>"; };
@@ -476,6 +478,7 @@
 		7A11A1FF000000000000000A /* WindowAnimation */ = {
 			isa = PBXGroup;
 			children = (
+				7A11A1000000000000000103 /* GhostOverlayWindow.swift */,
 				7A11A1000000000000000102 /* WindowSnapshot.swift */,
 				7A11A1000000000000000101 /* WindowAnimationGeometry.swift */,
 			);
@@ -1037,6 +1040,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A11A1010000000000000103 /* GhostOverlayWindow.swift in Sources */,
 				7A11A1010000000000000102 /* WindowSnapshot.swift in Sources */,
 				7A11A1010000000000000101 /* WindowAnimationGeometry.swift in Sources */,
 				98A009B32512536900CFBF0C /* LastFourthCalculation.swift in Sources */,
