@@ -193,9 +193,14 @@ record the screen; this is documented in the terminal commands section.
 | `WindowManager.execute` — cooperative cleanup adjustments (`apply(_ adjustments:)`) | `include` each adjustment element before its `setFrame` |
 | `WindowManager.execute` — Restore branch | focused window |
 | `WindowManager.execute` — cross-display 25 ms retry | same transaction, ended in `postProcess` |
-| `SnappingManager.unsnapRestore` | dragged window |
+| `SnappingManager.unsnapRestore` | **not animated** (see note below) |
 | `MultiWindowManager` (tile / cascade) and `ReverseAllManager` | every window they touch |
 | `TodoManager` reflow | every window it touches |
+
+Unsnap-restore runs while the user is still dragging. A full-screen overlay would
+hide the real window under the cursor for the animation's duration and the drag
+would appear to freeze, so that resize stays instant. Windows 11 behaves the
+same way there.
 
 `execute`'s transaction is ended in `postProcess`, which every successful
 path reaches, and in the early returns that occur after begin (there are none
