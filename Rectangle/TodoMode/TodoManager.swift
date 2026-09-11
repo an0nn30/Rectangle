@@ -187,34 +187,37 @@ class TodoManager {
                 let sd = ScreenDetection()
                 var adjustedVisibleFrame = screen.adjustedVisibleFrame()
                 // Clear all windows from the todo app sidebar
-                for w in windows {
-                    let wScreen = sd.detectScreens(using: w)?.currentScreen
-                    if w.getWindowId() != todoWindow.getWindowId() &&
-                        wScreen == TodoManager.todoScreen {
+                let windowsToShift = windows.filter { w in
+                    w.getWindowId() != todoWindow.getWindowId()
+                        && sd.detectScreens(using: w)?.currentScreen == TodoManager.todoScreen
+                }
+
+                WindowAnimator.shared.perform(windows: windowsToShift + [todoWindow], covering: [screen.frame]) {
+                    for w in windowsToShift {
                         shiftWindowOffSidebar(w, screenVisibleFrame: adjustedVisibleFrame)
                     }
+
+                    adjustedVisibleFrame = screen.adjustedVisibleFrame(true)
+                    let sidebarWidth = getSidebarWidth(visibleFrameWidth: adjustedVisibleFrame.width)
+
+                    var sharedEdge: Edge
+                    var rect = adjustedVisibleFrame
+                    let isRightSide = Defaults.todoSidebarSide.value == .right
+
+                    sharedEdge = isRightSide ? .left : .right
+
+                    if isRightSide {
+                        rect.origin.x = adjustedVisibleFrame.maxX - sidebarWidth
+                    }
+                    rect.size.width = sidebarWidth
+
+                    rect = rect.screenFlipped
+
+                    if Defaults.gapSize.value > 0 {
+                        rect = GapCalculation.applyGaps(rect, sharedEdges: sharedEdge, gapSize: Defaults.gapSize.value)
+                    }
+                    todoWindow.setFrame(rect)
                 }
-
-                adjustedVisibleFrame = screen.adjustedVisibleFrame(true)
-                let sidebarWidth = getSidebarWidth(visibleFrameWidth: adjustedVisibleFrame.width)
-
-                var sharedEdge: Edge
-                var rect = adjustedVisibleFrame
-                let isRightSide = Defaults.todoSidebarSide.value == .right
-
-                sharedEdge = isRightSide ? .left : .right
-
-                if isRightSide {
-                    rect.origin.x = adjustedVisibleFrame.maxX - sidebarWidth
-                }
-                rect.size.width = sidebarWidth
-
-                rect = rect.screenFlipped
-                
-                if Defaults.gapSize.value > 0 {
-                    rect = GapCalculation.applyGaps(rect, sharedEdges: sharedEdge, gapSize: Defaults.gapSize.value)
-                }
-                todoWindow.setFrame(rect)
             }
 
             if bringToFront {

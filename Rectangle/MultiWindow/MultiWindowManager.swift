@@ -77,10 +77,12 @@ class MultiWindowManager {
         let rows = Int(ceil(CGFloat(count) / CGFloat(columns)))
         let size = CGSize(width: (screenFrame.maxX - screenFrame.minX) / CGFloat(columns), height: (screenFrame.maxY - screenFrame.minY) / CGFloat(rows))
 
-        for (ind, w) in windows.enumerated() {
-            let column = ind % Int(columns)
-            let row = ind / Int(columns)
-            tileWindow(w, screenFrame: screenFrame, size: size, column: column, row: row)
+        WindowAnimator.shared.perform(windows: windows, covering: [screens.currentScreen.frame]) {
+            for (ind, w) in windows.enumerated() {
+                let column = ind % Int(columns)
+                let row = ind / Int(columns)
+                tileWindow(w, screenFrame: screenFrame, size: size, column: column, row: row)
+            }
         }
     }
 
@@ -105,8 +107,10 @@ class MultiWindowManager {
 
         let delta = CGFloat(Defaults.cascadeAllDeltaSize.value)
 
-        for (ind, w) in windows.enumerated() {
-            cascadeWindow(w, screenFrame: screenFrame, delta: delta, index: ind)
+        WindowAnimator.shared.perform(windows: windows, covering: [screens.currentScreen.frame]) {
+            for (ind, w) in windows.enumerated() {
+                cascadeWindow(w, screenFrame: screenFrame, delta: delta, index: ind)
+            }
         }
     }
 
@@ -150,8 +154,10 @@ class MultiWindowManager {
         }
 
         // cascade the filtered windows
-        for (ind, w) in filtered.enumerated() {
-            cascadeWindow(w, screenFrame: screenFrame, delta: delta, index: ind, cascadeParameters: cascadeParameters)
+        WindowAnimator.shared.perform(windows: filtered, covering: [screens.currentScreen.frame]) {
+            for (ind, w) in filtered.enumerated() {
+                cascadeWindow(w, screenFrame: screenFrame, delta: delta, index: ind, cascadeParameters: cascadeParameters)
+            }
         }
 
         // return true for a w pid equal to the front window's pid
@@ -202,10 +208,12 @@ class MultiWindowManager {
         let rows = Int(ceil(CGFloat(count) / CGFloat(columns)))
         let size = CGSize(width: (screenFrame.maxX - screenFrame.minX) / CGFloat(columns), height: (screenFrame.maxY - screenFrame.minY) / CGFloat(rows))
 
-        for (ind, w) in filtered.enumerated() {
-            let column = ind % Int(columns)
-            let row = ind / Int(columns)
-            tileWindow(w, screenFrame: screenFrame, size: size, column: column, row: row)
+        WindowAnimator.shared.perform(windows: filtered, covering: [screens.currentScreen.frame]) {
+            for (ind, w) in filtered.enumerated() {
+                let column = ind % Int(columns)
+                let row = ind / Int(columns)
+                tileWindow(w, screenFrame: screenFrame, size: size, column: column, row: row)
+            }
         }
     }
 }

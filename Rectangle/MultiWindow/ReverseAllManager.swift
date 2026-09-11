@@ -15,10 +15,13 @@ class ReverseAllManager {
 
         let screenFrame = currentScreen.adjustedVisibleFrame()
 
-        for w in windows {
-            let wScreen = sd.detectScreens(using: w)?.currentScreen
-            if Defaults.todo.userEnabled && TodoManager.isTodoWindow(w) { continue }
-            if wScreen == currentScreen {
+        let windowsOnScreen = windows.filter { w in
+            if Defaults.todo.userEnabled && TodoManager.isTodoWindow(w) { return false }
+            return sd.detectScreens(using: w)?.currentScreen == currentScreen
+        }
+
+        WindowAnimator.shared.perform(windows: windowsOnScreen, covering: [currentScreen.frame]) {
+            for w in windowsOnScreen {
                 reverseWindowPosition(w, screenFrame: screenFrame)
             }
         }
