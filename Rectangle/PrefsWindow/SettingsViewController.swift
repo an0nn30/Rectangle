@@ -2,7 +2,6 @@
 
 import Cocoa
 import ServiceManagement
-import Sparkle
 import MASShortcut
 
 class SettingsViewController: NSViewController {
@@ -12,8 +11,6 @@ class SettingsViewController: NSViewController {
     @IBOutlet weak var hideMenuBarIconCheckbox: NSButton!
     @IBOutlet weak var subsequentExecutionPopUpButton: NSPopUpButton!
     @IBOutlet weak var allowAnyShortcutCheckbox: NSButton!
-    @IBOutlet weak var checkForUpdatesAutomaticallyCheckbox: NSButton!
-    @IBOutlet weak var checkForUpdatesButton: NSButton!
     @IBOutlet weak var gapSlider: NSSlider!
     @IBOutlet weak var gapLabel: NSTextField!
     @IBOutlet weak var skipGapTopEdgeCheckbox: NSButton!
@@ -144,10 +141,6 @@ class SettingsViewController: NSViewController {
 
     @objc func toggleCooperativeCornerResize(_ sender: NSButton) {
         Defaults.cooperativeCornerResize.enabled = sender.state == .on
-    }
-    
-    @IBAction func checkForUpdates(_ sender: Any) {
-        AppDelegate.instance.updaterController?.checkForUpdates(sender)
     }
     
     @IBAction func toggleDoubleClickTitleBar(_ sender: NSButton) {
@@ -1109,15 +1102,11 @@ class SettingsViewController: NSViewController {
                                                name: .stackBadgeChanged,
                                                object: nil)
 
-        checkForUpdatesAutomaticallyCheckbox.bind(.value, to: AppDelegate.instance.updaterController.updater, withKeyPath: "automaticallyChecksForUpdates", options: nil)
-        
         let appVersionString: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String
         let buildString: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as! String
         
         versionLabel.stringValue = "v" + appVersionString + " (" + buildString + ")"
 
-        updateCheckForUpdatesTitle()
-        
         initializeTodoModeSettings()
         shortcutRecordingObserver.observe([toggleTodoShortcutView, reflowTodoShortcutView])
         
@@ -1160,14 +1149,6 @@ class SettingsViewController: NSViewController {
         Notification.Name.menuBarIconHidden.onPost(using: {_ in
             self.hideMenuBarIconCheckbox.state = .on
         })
-        
-        Notification.Name.updateAvailability.onPost { _ in
-            self.updateCheckForUpdatesTitle()
-        }
-    }
-    
-    func updateCheckForUpdatesTitle() {
-        checkForUpdatesButton.title = AppDelegate.instance.hasPendingUpdate ? "Update Available…".localized : "Check for Updates…".localized(key: "74m-kw-w1f.title")
     }
     
     func initializeTodoModeSettings() {
@@ -1194,8 +1175,6 @@ class SettingsViewController: NSViewController {
     }
     
     func initializeToggles() {
-        checkForUpdatesAutomaticallyCheckbox.state = Defaults.SUEnableAutomaticChecks.enabled ? .on : .off
-        
         launchOnLoginCheckbox.state = Defaults.launchOnLogin.enabled ? .on : .off
         
         hideMenuBarIconCheckbox.state = Defaults.hideMenuBarIcon.enabled ? .on : .off

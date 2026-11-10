@@ -12,13 +12,7 @@ Rectangle supports macOS v10.15+. The last version that is supported for macOS 1
 
 ## Installation
 
-You can download the latest dmg from <https://rectangleapp.com> or the [Releases page](https://github.com/rxhanson/Rectangle/releases).
-
-Or install with brew cask:
-
-```bash
-brew install --cask rectangle
-```
+To install or update this fork, build it from source and replace your installed copy. See [Building from the terminal](#building-from-the-terminal).
 
 ## How to use it
 
@@ -159,27 +153,12 @@ That file can be backed up or transferred to other machines.
 
 If you are using Rectangle v0.44+, you can also use the import/export button in the Preferences pane to share to your preferences and keyboard shortcuts across machines using a JSON file.
 
-> [!NOTE]  
-> If you are having issues with configuration options persisting after an application restart and you've installed using Homebrew, you will need to uninstall and reinstall with the `--zap` flag.
-
-```
-brew uninstall --zap rectangle
-brew install rectangle
-```
-
 ## Uninstallation
 
 Rectangle can be uninstalled by quitting the app and moving it to the trash. You can remove the Rectangle defaults from your machine with the following terminal command:
 
 ```bash
 defaults delete com.knollsoft.Rectangle
-```
-
-> [!TIP]  
-> If you are uninstalling after installing with Homebrew, you should include the `--zap` flag to ensure it removes the plist entries too. 
-
-```
-brew uninstall --zap rectangle
 ```
 
 ---
@@ -200,7 +179,7 @@ Pull requests for new localizations or improvements on existing localizations ar
 
 ### Running the app in Xcode (for developers)
 
-Rectangle uses [Swift Package Manager](https://www.swift.org/package-manager/) to install Sparkle and MASShortcut.
+Rectangle uses [Swift Package Manager](https://www.swift.org/package-manager/) to install MASShortcut.
 
 The original repository for MASShortcut was archived, so Rectangle uses my [fork](https://github.com/rxhanson/MASShortcut). If you want to make any changes that involve MASShortcut, please make a pull request on my fork. 
 
@@ -216,7 +195,7 @@ make release  # build/Release/Rectangle.app, for Apple silicon and Intel Macs
 make test     # run the test suite
 ```
 
-These local builds use ad-hoc signing and do not require an Apple developer account. Like Debug, they omit hardened runtime because its library validation rejects the ad-hoc-signed Sparkle framework. They are not notarized distribution builds; the project's official Release signing settings remain unchanged. The Xcode requirements and older-macOS asset catalog workaround described above also apply here.
+These local builds use ad-hoc signing and do not require an Apple developer account. The Xcode requirements and older-macOS asset catalog workaround described above also apply here.
 
 To install, quit any running copy of Rectangle and copy `build/Release/Rectangle.app` into `/Applications`. Open the installed copy and grant Accessibility access if macOS requests it. To use the optional window animations, enable **Animate window movement** under **Settings → General → Extras** and grant Screen Recording access. Rebuilding or replacing an ad-hoc-signed app can require granting these permissions again.
 
@@ -224,7 +203,7 @@ Build output is ignored by Git. To use another output directory, pass an absolut
 
 ## Credits
 
-As mentioned above, Rectangle uses a forked version of [MASShortcut](https://github.com/rxhanson/MASShortcut), which still works great, and it uses [Sparkle](https://sparkle-project.org) for updates. 
+Rectangle uses a forked version of [MASShortcut](https://github.com/rxhanson/MASShortcut) for keyboard shortcuts.
 
 The Big Sur variant of the Rectangle app icon was created by Giovanni Maria Cusaro (@gmcusaro). The Liquid Glass variant of the app icon was created by [Alexander Käßner](https://www.alexkaessner.de) (@alexkaessner).
 

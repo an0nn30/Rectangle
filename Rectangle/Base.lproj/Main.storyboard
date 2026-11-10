@@ -221,7 +221,6 @@
                         <outlet property="mainStatusMenu" destination="6wc-Rn-2EG" id="UWt-be-ZH1"/>
                         <outlet property="quitMenuItem" destination="A66-A4-cGD" id="Vul-Dd-RcH"/>
                         <outlet property="unauthorizedMenu" destination="HZt-qn-3MK" id="c4f-hw-GWr"/>
-                        <outlet property="updatesMenuItem" destination="HIK-3r-i7E" id="UGJ-IC-qKI"/>
                         <outlet property="viewLoggingMenuItem" destination="O8K-y6-bva" id="31H-se-kyh"/>
                     </connections>
                 </customObject>
@@ -252,12 +251,6 @@
                             <modifierMask key="keyEquivalentModifierMask"/>
                             <connections>
                                 <action selector="viewLogging:" target="Voe-Tx-rLC" id="8cH-2P-yKC"/>
-                            </connections>
-                        </menuItem>
-                        <menuItem title="Check for Updates…" id="HIK-3r-i7E">
-                            <modifierMask key="keyEquivalentModifierMask"/>
-                            <connections>
-                                <action selector="checkForUpdates:" target="Voe-Tx-rLC" id="kWZ-ie-6y9"/>
                             </connections>
                         </menuItem>
                         <menuItem title="Quit Rectangle" keyEquivalent="q" id="A66-A4-cGD">
@@ -2752,39 +2745,6 @@
                                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                 </textFieldCell>
                                             </textField>
-                                            <stackView distribution="fill" orientation="horizontal" alignment="centerY" spacing="10" horizontalStackHuggingPriority="249.99998474121094" verticalStackHuggingPriority="249.99998474121094" detachesHiddenViews="YES" translatesAutoresizingMaskIntoConstraints="NO" id="AmL-wm-e8w">
-                                                <rect key="frame" x="0.0" y="484" width="500" height="21"/>
-                                                <subviews>
-                                                    <button horizontalHuggingPriority="249" verticalHuggingPriority="750" horizontalCompressionResistancePriority="751" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="HcU-0y-wJU">
-                                                        <rect key="frame" x="0.0" y="3" width="342" height="16"/>
-                                                        <buttonCell key="cell" type="check" title="Check for updates automatically" bezelStyle="regularSquare" imagePosition="left" state="on" inset="2" id="rmV-YD-Hzj">
-                                                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
-                                                            <font key="font" metaFont="system"/>
-                                                        </buttonCell>
-                                                    </button>
-                                                    <button verticalHuggingPriority="750" verticalCompressionResistancePriority="1000" translatesAutoresizingMaskIntoConstraints="NO" id="bn6-rz-AHw">
-                                                        <rect key="frame" x="352" y="0.0" width="148" height="21"/>
-                                                        <buttonCell key="cell" type="push" title="Check for Updates…" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="74m-kw-w1f">
-                                                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
-                                                            <font key="font" metaFont="system"/>
-                                                        </buttonCell>
-                                                        <connections>
-                                                            <action selector="checkForUpdates:" target="yhc-gS-h02" id="Gln-SX-iYO"/>
-                                                        </connections>
-                                                    </button>
-                                                </subviews>
-                                                <constraints>
-                                                    <constraint firstAttribute="height" constant="21" id="gzn-PM-OIu"/>
-                                                </constraints>
-                                                <visibilityPriorities>
-                                                    <integer value="1000"/>
-                                                    <integer value="1000"/>
-                                                </visibilityPriorities>
-                                                <customSpacing>
-                                                    <real value="3.4028234663852886e+38"/>
-                                                    <real value="3.4028234663852886e+38"/>
-                                                </customSpacing>
-                                            </stackView>
                                             <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="ujo-nl-syC">
                                                 <rect key="frame" x="0.0" y="452" width="500" height="24"/>
                                                 <constraints>
@@ -3380,10 +3340,8 @@
                                             <integer value="1000"/>
                                             <integer value="1000"/>
                                             <integer value="1000"/>
-                                            <integer value="1000"/>
                                         </visibilityPriorities>
                                         <customSpacing>
-                                            <real value="3.4028234663852886e+38"/>
                                             <real value="3.4028234663852886e+38"/>
                                             <real value="3.4028234663852886e+38"/>
                                             <real value="3.4028234663852886e+38"/>
@@ -3429,8 +3387,6 @@
                     </view>
                     <connections>
                         <outlet property="allowAnyShortcutCheckbox" destination="UY7-Nt-G3K" id="0dH-iu-gSs"/>
-                        <outlet property="checkForUpdatesAutomaticallyCheckbox" destination="HcU-0y-wJU" id="ueY-S8-Ec0"/>
-                        <outlet property="checkForUpdatesButton" destination="bn6-rz-AHw" id="9jf-az-Lvw"/>
                         <outlet property="cursorAcrossCheckbox" destination="WUS-pH-Rxv" id="xTd-uX-foF"/>
                         <outlet property="cycleSizesView" destination="er1-EQ-YIF" id="yHn-9t-gqI"/>
                         <outlet property="cycleSizesViewHeightConstraint" destination="IXv-8o-a6i" id="zjD-0U-P8y"/>

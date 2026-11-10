@@ -16,7 +16,6 @@ extension Notification.Name {
     static let windowTitleBar = Notification.Name("windowTitleBar")
     static let greenButtonOverride = Notification.Name("greenButtonOverride")
     static let defaultSnapAreas = Notification.Name("defaultSnapAreas")
-    static let updateAvailability = Notification.Name("updateAvailability")
     static let showAdditionalSizesInMenuChanged = Notification.Name("showAdditionalSizesInMenuChanged")
     static let shortcutRecording = Notification.Name("shortcutRecording")
     static let stackBadgeChanged = Notification.Name("stackBadgeChanged")

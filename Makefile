@@ -4,10 +4,9 @@ XCODEBUILD ?= xcodebuild
 BUILD_DIR ?= $(CURDIR)/build
 
 # Local builds use ad-hoc signing; no Apple developer account is required.
-# As in Debug, omit hardened runtime: its library validation rejects ad-hoc Sparkle.
 XCODE_FLAGS = -project Rectangle.xcodeproj -scheme Rectangle \
 	-derivedDataPath "$(BUILD_DIR)/DerivedData" \
-	SYMROOT="$(BUILD_DIR)" CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= ENABLE_HARDENED_RUNTIME=NO
+	SYMROOT="$(BUILD_DIR)" CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=
 
 .PHONY: help debug release test
 

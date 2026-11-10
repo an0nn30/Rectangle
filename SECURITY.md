@@ -16,7 +16,6 @@ Security fixes are applied only to the latest stable release.
 Rectangle requires **macOS Accessibility Permissions** (`AXUIElement`) to manage windows. 
 
 * **Local Only:** Rectangle runs entirely locally. It never collects, logs, or transmits window layouts, keystrokes, or personal data.
-* **Network Access:** Limited strictly to checking for updates via the Sparkle framework (if enabled).
 
 ## Reporting a Vulneraging / Contact
 

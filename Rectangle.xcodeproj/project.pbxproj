@@ -113,7 +113,6 @@
 		985B9BF822BB6F5100A2E8F0 /* MessageView.xib in Resources */ = {isa = PBXBuildFile; fileRef = 985B9BF622BB6F5000A2E8F0 /* MessageView.xib */; };
 		985B9BF922BB6F5100A2E8F0 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 985B9BF722BB6F5000A2E8F0 /* MessageView.swift */; };
 		9877B63A29C8AC0E00F02D74 /* MASShortcut in Frameworks */ = {isa = PBXBuildFile; productRef = 9877B63929C8AC0E00F02D74 /* MASShortcut */; };
-		9877B63D29C8AC3600F02D74 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 9877B63C29C8AC3600F02D74 /* Sparkle */; };
 		988D066122EB4C7C004EABD7 /* FirstThirdCalculation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988D066022EB4C7C004EABD7 /* FirstThirdCalculation.swift */; };
 		988D066322EB4CA5004EABD7 /* FirstTwoThirdsCalculation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988D066222EB4CA5004EABD7 /* FirstTwoThirdsCalculation.swift */; };
 		988D066522EB4CB6004EABD7 /* CenterThirdCalculation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988D066422EB4CB5004EABD7 /* CenterThirdCalculation.swift */; };
@@ -463,7 +462,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				9877B63A29C8AC0E00F02D74 /* MASShortcut in Frameworks */,
-				9877B63D29C8AC3600F02D74 /* Sparkle in Frameworks */,
 				9821405E22B3ED3600ABFB3F /* ServiceManagement.framework in Frameworks */,
 				12D896200936C0DE9FF41FB4 /* (null) in Frameworks */,
 			);
@@ -883,7 +881,6 @@
 			name = Rectangle;
 			packageProductDependencies = (
 				9877B63929C8AC0E00F02D74 /* MASShortcut */,
-				9877B63C29C8AC3600F02D74 /* Sparkle */,
 			);
 			productName = Rectangle;
 			productReference = 9824700922AF9B7D0037B409 /* Rectangle.app */;
@@ -988,7 +985,6 @@
 			mainGroup = 9824700022AF9B7D0037B409;
 			packageReferences = (
 				9877B63829C8AC0E00F02D74 /* XCRemoteSwiftPackageReference "MASShortcut" */,
-				9877B63B29C8AC3600F02D74 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 9824700A22AF9B7D0037B409 /* Products */;
 			projectDirPath = "";
@@ -1624,14 +1620,6 @@
 				revision = 2f9fbb3f959b7a683c6faaf9638d22afad37a235;
 			};
 		};
-		9877B63B29C8AC3600F02D74 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1639,11 +1627,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9877B63829C8AC0E00F02D74 /* XCRemoteSwiftPackageReference "MASShortcut" */;
 			productName = MASShortcut;
-		};
-		9877B63C29C8AC3600F02D74 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 9877B63B29C8AC3600F02D74 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
